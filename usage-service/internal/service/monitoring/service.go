@@ -40,6 +40,7 @@ type Filters struct {
 	APIKeyHashes      []string `json:"api_key_hashes"`
 	SourceHashes      []string `json:"source_hashes"`
 	IncludeFailed     *bool    `json:"include_failed"`
+	FailedOnly        bool     `json:"failed_only"`
 	ExcludeZeroTokens bool     `json:"exclude_zero_token"`
 }
 
@@ -353,6 +354,7 @@ func buildFilter(req Request) store.AnalyticsFilter {
 		APIKeyHashes:      req.Filters.APIKeyHashes,
 		SourceHashes:      req.Filters.SourceHashes,
 		IncludeFailed:     includeFailed,
+		FailedOnly:        req.Filters.FailedOnly,
 		ExcludeZeroTokens: req.Filters.ExcludeZeroTokens,
 	}
 }

@@ -17,6 +17,7 @@ type AnalyticsFilter struct {
 	APIKeyHashes      []string
 	SourceHashes      []string
 	IncludeFailed     bool
+	FailedOnly        bool
 	ExcludeZeroTokens bool
 }
 
@@ -574,6 +575,9 @@ func analyticsWhere(filter AnalyticsFilter) (string, []any) {
 	addInCondition("source_hash", filter.SourceHashes)
 	if !filter.IncludeFailed {
 		conditions = append(conditions, "failed = 0")
+	}
+	if filter.FailedOnly {
+		conditions = append(conditions, "failed = 1")
 	}
 	if filter.ExcludeZeroTokens {
 		conditions = append(conditions, "total_tokens > 0")

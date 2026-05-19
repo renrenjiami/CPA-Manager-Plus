@@ -182,6 +182,37 @@ func TestAnalyticsReportsZeroTokenModels(t *testing.T) {
 	}
 }
 
+func TestAnalyticsAppliesFailedOnlyFilter(t *testing.T) {
+	db := newMonitoringTestStore(t)
+	ctx := context.Background()
+	fromMS := int64(1_778_100_000_000)
+	toMS := fromMS + 60*60*1000
+
+	_, err := db.InsertEvents(ctx, []usage.Event{
+		monitoringEvent("status-a", fromMS+1_000, "gpt-ok", "auth-1", "source-a", false, 10, 5, 0, 0, 15, nil),
+		monitoringEvent("status-b", fromMS+2_000, "gpt-failed", "auth-1", "source-a", true, 1, 1, 0, 0, 2, nil),
+	})
+	if err != nil {
+		t.Fatalf("insert events: %v", err)
+	}
+
+	resp, err := New(db).Analytics(ctx, Request{
+		FromMS:  fromMS,
+		ToMS:    toMS,
+		Filters: Filters{FailedOnly: true},
+		Include: Include{Summary: true, EventsPage: &EventsPage{Limit: 10}},
+	})
+	if err != nil {
+		t.Fatalf("analytics: %v", err)
+	}
+	if resp.Summary == nil || resp.Summary.TotalCalls != 1 || resp.Summary.FailureCalls != 1 {
+		t.Fatalf("summary = %#v", resp.Summary)
+	}
+	if resp.Events == nil || len(resp.Events.Items) != 1 || !resp.Events.Items[0].Failed {
+		t.Fatalf("events = %#v", resp.Events)
+	}
+}
+
 func newMonitoringTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "usage.sqlite"))
