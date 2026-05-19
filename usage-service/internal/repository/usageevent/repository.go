@@ -27,6 +27,7 @@ type Repository interface {
 	RecentFailuresWithFilter(ctx context.Context, filter AnalyticsFilter, limit int) ([]RecentFailure, error)
 	EventsPageWithFilter(ctx context.Context, filter AnalyticsFilter, beforeMS int64, limit int) (EventsPage, error)
 	ActiveDaysWithFilter(ctx context.Context, filter AnalyticsFilter) (int64, error)
+	ZeroTokenModelsWithFilter(ctx context.Context, filter AnalyticsFilter) ([]string, error)
 }
 
 type repository struct {

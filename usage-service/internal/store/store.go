@@ -200,3 +200,7 @@ func (s *Store) EventsPageWithFilter(ctx context.Context, filter AnalyticsFilter
 func (s *Store) ActiveDaysWithFilter(ctx context.Context, filter AnalyticsFilter) (int64, error) {
 	return s.UsageEvents.ActiveDaysWithFilter(ctx, filter)
 }
+
+func (s *Store) ZeroTokenModelsWithFilter(ctx context.Context, filter AnalyticsFilter) ([]string, error) {
+	return s.UsageEvents.ZeroTokenModelsWithFilter(ctx, filter)
+}

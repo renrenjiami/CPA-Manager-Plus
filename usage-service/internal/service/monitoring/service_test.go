@@ -141,6 +141,47 @@ func TestAnalyticsAppliesFilters(t *testing.T) {
 	}
 }
 
+func TestAnalyticsReportsZeroTokenModels(t *testing.T) {
+	db := newMonitoringTestStore(t)
+	ctx := context.Background()
+	fromMS := int64(1_778_000_000_000)
+	toMS := fromMS + 60*60*1000
+
+	_, err := db.InsertEvents(ctx, []usage.Event{
+		monitoringEvent("zero-a", fromMS+1_000, "gpt-zero", "auth-1", "source-a", false, 0, 0, 0, 0, 0, nil),
+		monitoringEvent("zero-b", fromMS+2_000, "gpt-failed-zero", "auth-1", "source-a", true, 0, 0, 0, 0, 0, nil),
+		monitoringEvent("zero-c", fromMS+3_000, "gpt-nonzero", "auth-1", "source-a", false, 1, 1, 0, 0, 2, nil),
+	})
+	if err != nil {
+		t.Fatalf("insert events: %v", err)
+	}
+
+	resp, err := New(db).Analytics(ctx, Request{
+		FromMS:  fromMS,
+		ToMS:    toMS,
+		Include: Include{Summary: true},
+	})
+	if err != nil {
+		t.Fatalf("analytics: %v", err)
+	}
+	if resp.Summary == nil || len(resp.Summary.ZeroTokenModels) != 1 || resp.Summary.ZeroTokenModels[0] != "gpt-zero" {
+		t.Fatalf("zero token models = %#v", resp.Summary)
+	}
+
+	resp, err = New(db).Analytics(ctx, Request{
+		FromMS:  fromMS,
+		ToMS:    toMS,
+		Filters: Filters{ExcludeZeroTokens: true},
+		Include: Include{Summary: true},
+	})
+	if err != nil {
+		t.Fatalf("analytics with zero-token filter: %v", err)
+	}
+	if resp.Summary == nil || resp.Summary.ZeroTokenCalls != 0 || len(resp.Summary.ZeroTokenModels) != 0 {
+		t.Fatalf("filtered zero token summary = %#v", resp.Summary)
+	}
+}
+
 func newMonitoringTestStore(t *testing.T) *store.Store {
 	t.Helper()
 	db, err := store.Open(filepath.Join(t.TempDir(), "usage.sqlite"))

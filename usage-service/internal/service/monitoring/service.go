@@ -266,7 +266,11 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 		if err != nil {
 			return Response{}, err
 		}
-		response.Summary = buildSummary(agg, rollingAgg, activeDays, modelStats, taskBuckets, prices)
+		zeroTokenModels, err := s.store.ZeroTokenModelsWithFilter(ctx, filter)
+		if err != nil {
+			return Response{}, err
+		}
+		response.Summary = buildSummary(agg, rollingAgg, activeDays, modelStats, taskBuckets, prices, zeroTokenModels)
 	}
 	if req.Include.Timeline {
 		points, err := s.store.TimelineWithFilter(ctx, filter, granularity)
@@ -363,7 +367,7 @@ func normalizeGranularity(input string, fromMS int64, toMS int64) string {
 	return "day"
 }
 
-func buildSummary(agg store.Aggregate, rolling store.Aggregate, activeDays int64, modelStats []store.ModelStat, taskBuckets []store.TaskBucket, prices map[string]store.ModelPrice) *Summary {
+func buildSummary(agg store.Aggregate, rolling store.Aggregate, activeDays int64, modelStats []store.ModelStat, taskBuckets []store.TaskBucket, prices map[string]store.ModelPrice, zeroTokenModels []string) *Summary {
 	dayCount := activeDays
 	if dayCount <= 0 {
 		dayCount = 1
@@ -395,7 +399,7 @@ func buildSummary(agg store.Aggregate, rolling store.Aggregate, activeDays int64
 		ApproxTasks:           approxTasks,
 		ApproxTaskFailures:    taskFailures,
 		ApproxTaskSuccessRate: ratio(approxTasks-taskFailures, approxTasks),
-		ZeroTokenModels:       []string{},
+		ZeroTokenModels:       zeroTokenModels,
 	}
 }
 

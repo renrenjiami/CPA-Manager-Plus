@@ -512,6 +512,32 @@ func (r *repository) ActiveDaysWithFilter(ctx context.Context, filter AnalyticsF
 	return count, nil
 }
 
+func (r *repository) ZeroTokenModelsWithFilter(ctx context.Context, filter AnalyticsFilter) ([]string, error) {
+	where, args := analyticsWhere(filter)
+	rows, err := r.db.QueryContext(ctx, `select distinct coalesce(model, '')
+from usage_events `+where+`
+and total_tokens = 0
+and failed = 0
+order by model`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	models := make([]string, 0)
+	for rows.Next() {
+		var model string
+		if err := rows.Scan(&model); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(model) == "" {
+			continue
+		}
+		models = append(models, model)
+	}
+	return models, rows.Err()
+}
+
 func analyticsWhere(filter AnalyticsFilter) (string, []any) {
 	conditions := []string{"timestamp_ms >= ?", "timestamp_ms < ?"}
 	args := []any{filter.FromMS, filter.ToMS}
