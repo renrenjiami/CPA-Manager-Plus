@@ -46,7 +46,7 @@ Request statistics require the CPA usage queue:
 - Request monitoring requires CPA usage publishing: set `usage-statistics-enabled: true`, or submit `{ "value": true }` to `PUT /usage-statistics-enabled`. CPA Manager Plus enables this automatically when request monitoring is enabled during setup or configuration save.
 - Disabling CPAM request monitoring only stops the Usage Service collector. It does not automatically disable CPA usage publishing or clear the CPA usage queue. If CPA usage publishing remains enabled, re-enabling request monitoring within the queue retention window may collect events retained while the collector was stopped.
 - CPA `v7.1.0+` is recommended for current panel capabilities. CPA `v6.10.8+` already exposes the HTTP usage queue endpoint `/v0/management/usage-queue`, which can pass through regular HTTP reverse proxies.
-- Older CPA versions use the RESP queue protocol. Usage Service falls back to RESP in `auto` mode when the HTTP queue endpoint is unavailable. RESP listens on the CPA API port, usually `8317`, and cannot pass through a regular HTTP reverse proxy.
+- Usage Service `auto` mode tries RESP Pub/Sub (`subscribe`) first, then the HTTP usage queue, then RESP pop mode for older CPA versions. RESP transports listen on the CPA API port, usually `8317`, and cannot pass through a regular HTTP reverse proxy.
 - CPA keeps queue items in memory for `redis-usage-queue-retention-seconds`, default `60` seconds and maximum `3600` seconds. Keep Usage Service running continuously.
 - Usage Service `pollIntervalMs` must be less than or equal to the CPA queue retention window converted to milliseconds. Saves are rejected when the collector would poll too slowly and risk expired queue items.
 - Exactly one Usage Service should consume the same CPA usage queue.
@@ -61,11 +61,11 @@ Browser
       -> built-in management.html
       -> /v0/management/usage and /v0/management/model-prices from SQLite
       -> other /v0/management/* proxied to CPA
-      -> HTTP/RESP consumer -> CPA API port
+      -> HTTP/RESP/PubSub consumer -> CPA API port
       -> SQLite /data/usage.sqlite
 ```
 
-The login page calls `GET /usage-service/info` and detects that it is hosted by Usage Service. If the response is not configured yet, it shows the setup wizard: you enter the CPA URL, Management Key, and choose whether to enable request monitoring. When monitoring is enabled, you also set the collector polling interval; Usage Service validates the CPA Management API, enables CPA usage publishing, checks that the poll interval does not exceed the CPA queue retention window, stores CPA Manager Plus configuration in SQLite, starts the collector with the configured mode (`auto` by default: HTTP queue first, RESP fallback), and serves the panel from the same origin. When monitoring is disabled, the CPA connection is still saved for Management API proxying, but CPA usage publishing and the collector stay off.
+The login page calls `GET /usage-service/info` and detects that it is hosted by Usage Service. If the response is not configured yet, it shows the setup wizard: you enter the CPA URL, Management Key, and choose whether to enable request monitoring. When monitoring is enabled, you also set the collector polling interval; Usage Service validates the CPA Management API, enables CPA usage publishing, checks that the poll interval does not exceed the CPA queue retention window, stores CPA Manager Plus configuration in SQLite, starts the collector with the configured mode (`auto` by default: RESP Pub/Sub, then HTTP queue, then RESP pop fallback), and serves the panel from the same origin. When monitoring is disabled, the CPA connection is still saved for Management API proxying, but CPA usage publishing and the collector stay off.
 
 After Usage Service is configured, a new browser opening the same URL uses the normal login form. The user only enters the Management Key; the panel uses the CPA connection saved on the server.
 
@@ -78,7 +78,7 @@ Browser
       -> usage calls go to configured Usage Service URL
 
 Usage Service
-  -> HTTP/RESP consumer -> CPA API port
+  -> HTTP/RESP/PubSub consumer -> CPA API port
   -> SQLite /data/usage.sqlite
 ```
 
@@ -97,7 +97,7 @@ model -> repository -> service -> controller -> router
 - `internal/service` contains setup, manager config, usage, model price, API key alias, proxy, panel, and collector lifecycle rules.
 - `internal/http/controller`, `internal/http/middleware`, and `internal/http/router` keep HTTP decoding, CORS/auth/recovery, Gin routing, and response writing at the edge.
 - `internal/httpapi` remains a compatibility wrapper for the current `cmd/cpa-manager-plus` entrypoint.
-- `internal/worker` coordinates collector startup/restart/stop without changing the existing HTTP/RESP/auto queue consumers.
+- `internal/worker` coordinates collector startup/restart/stop without changing the existing HTTP, RESP Pub/Sub, RESP pop, and auto queue consumers.
 
 ## Quick Start: Full Docker Mode
 
@@ -269,7 +269,7 @@ The variables below are Usage Service runtime settings. Frontend build-time sett
 | `CPA_UPSTREAM_URL` | empty | Optional CPA base URL for unattended startup |
 | `CPA_MANAGEMENT_KEY` | empty | Optional CPA Management Key for unattended startup |
 | `CPA_MANAGEMENT_KEY_FILE` | `/run/secrets/cpa_management_key` | Optional file containing the Management Key |
-| `USAGE_COLLECTOR_MODE` | `auto` | Collection mode: `auto` prefers the HTTP usage queue and falls back to RESP for older CPA; `http` forces HTTP; `resp` forces RESP |
+| `USAGE_COLLECTOR_MODE` | `auto` | Collection mode: `auto` tries RESP Pub/Sub, then HTTP usage queue, then RESP pop fallback; `subscribe` forces RESP Pub/Sub; `http` forces HTTP; `resp` forces RESP pop |
 | `USAGE_RESP_QUEUE` | `usage` | RESP key argument; CPA currently ignores it, leave the default unless upstream changes |
 | `USAGE_RESP_POP_SIDE` | `right` | `right` uses `RPOP`; `left` uses `LPOP` |
 | `USAGE_BATCH_SIZE` | `100` | Maximum queue records per pop |
@@ -310,8 +310,8 @@ If `CPA_UPSTREAM_URL` and `CPA_MANAGEMENT_KEY` are set, collection starts automa
 - In full Docker mode, CPA URL and Management Key are stored in the SQLite `settings` table so collection can resume after restart.
 - New versions prefer SQLite `settings.manager_config_v1`; legacy `settings.setup` is kept as compatibility data.
 - Protect the `/data` volume. It contains usage metadata and the saved Management Key.
-- Usage Service redacts key-like fields before storing raw JSON payload snapshots, but request metadata may still expose models, endpoints, account labels, and token usage.
-- RESP queue consumption is pop-based. Do not run multiple Usage Service consumers against the same CPA instance.
+- Usage Service redacts key-like fields before storing raw JSON payload snapshots, but request metadata may still expose requested/resolved models, endpoints, account labels, project snapshots, and token usage.
+- RESP pop queue consumption is destructive. RESP Pub/Sub is streaming. Do not run multiple Usage Service consumers against the same CPA instance.
 - If Usage Service is down longer than CPA's queue retention window, that period's usage cannot be recovered without CPA-side persistence.
 - If only the CPAM collector is stopped while CPA usage publishing remains enabled, restarting the collector within the retention window may consume queue items produced while collection was disabled.
 
@@ -345,7 +345,7 @@ Usage import accepts two file families: JSONL/NDJSON event files exported by Usa
 - **AI Providers**: Gemini, Codex, Claude, Vertex, OpenAI-compatible providers, and Ampcode
 - **Auth Files**: upload, download, delete, status, OAuth exclusions, model aliases
 - **Quota**: quota views for supported providers
-- **Request Monitoring**: persisted usage KPIs, model/channel/account breakdowns, model pricing, estimated token cost, failure analysis, realtime tables with a readable source label and one prioritized supplemental detail
+- **Request Monitoring**: persisted usage KPIs, model/channel/account/API-key breakdowns, requested vs resolved model tracking, project snapshots, model pricing, estimated token cost, failure analysis, realtime tables with a readable source label and one prioritized supplemental detail
 - **Codex Account Inspection**: batch probing and cleanup suggestions for Codex auth pools
 - **Logs**: incremental file log reading and filtering
 - **System Info**: model list, version checks, and local state tools
@@ -391,7 +391,7 @@ go run ./cmd/cpa-manager-plus
 - **Full Docker mode opens the login form instead of setup**: Usage Service is already configured. Enter the saved Management Key; the CPA URL comes from the server-side configuration.
 - **Wrong default CPA URL in first setup**: rebuild the panel with `VITE_DEFAULT_CPA_BASE_URL=<your-cpa-url>` or enter the correct CPA URL manually.
 - **Monitoring is empty**: enable CPA usage publishing, verify Usage Service `/status`, and confirm only one consumer is running.
-- **`unsupported RESP prefix 'H'`**: upgrade CPA to `v6.10.8+` and keep the default `USAGE_COLLECTOR_MODE=auto` so Usage Service uses the HTTP usage queue first. On older CPA or forced RESP mode, the CPA URL must be a container/host direct address for port `8317`, not a regular HTTP reverse-proxy domain.
+- **`unsupported RESP prefix 'H'`**: upgrade CPA to `v6.10.8+` or keep `USAGE_COLLECTOR_MODE=http` for reverse-proxied HTTP queue access. RESP Pub/Sub/RESP pop modes require the CPA URL to be a container/host direct address for port `8317`, not a regular HTTP reverse-proxy domain.
 - **401 from Usage Service**: use the same Management Key that was saved during setup.
 - **Docker panel shows stale data**: check `/status` for `lastConsumedAt`, `lastInsertedAt`, and `lastError`.
 - **CPA panel mode has CORS errors**: set `USAGE_CORS_ORIGINS` to the CPA panel origin or keep the default `*` for private deployments.

@@ -46,7 +46,6 @@ export type AuthFileCardProps = {
   disableControls: boolean;
   deleting: string | null;
   statusUpdating: Record<string, boolean>;
-  quotaFilterType: QuotaProviderType | null;
   statusBarCache: Map<string, AuthFileStatusBarData>;
   onShowModels: (file: AuthFileItem) => void;
   onDownload: (name: string) => void;
@@ -62,6 +61,15 @@ const resolveQuotaType = (file: AuthFileItem): QuotaProviderType | null => {
   return provider as QuotaProviderType;
 };
 
+const getProjectIdValue = (file: AuthFileItem): string => {
+  const raw =
+    file.project_id ??
+    file.projectId ??
+    file.gemini_virtual_project ??
+    file.geminiVirtualProject;
+  return typeof raw === 'string' ? raw.trim() : '';
+};
+
 export function AuthFileCard(props: AuthFileCardProps) {
   const { t } = useTranslation();
   const {
@@ -72,7 +80,6 @@ export function AuthFileCard(props: AuthFileCardProps) {
     disableControls,
     deleting,
     statusUpdating,
-    quotaFilterType,
     statusBarCache,
     onShowModels,
     onDownload,
@@ -94,9 +101,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
   const typeColor = getTypeColor(providerKey, resolvedTheme);
   const typeLabel = getTypeLabel(t, providerKey);
 
-  const quotaType =
-    quotaFilterType && resolveQuotaType(file) === quotaFilterType ? quotaFilterType : null;
-
+  const quotaType = resolveQuotaType(file);
   const showQuotaLayout = Boolean(quotaType) && !isRuntimeOnly && !compact;
 
   const providerCardClass =
@@ -122,6 +127,7 @@ export function AuthFileCard(props: AuthFileCardProps) {
     Boolean(rawStatusMessage) && !HEALTHY_STATUS_MESSAGES.has(rawStatusMessage.toLowerCase());
 
   const priorityValue = parsePriorityValue(file.priority ?? file['priority']);
+  const projectIdValue = getProjectIdValue(file);
   const noteValue = typeof file.note === 'string' ? file.note.trim() : '';
   const stateLabel = isRuntimeOnly
     ? t('auth_files.type_virtual') || '虚拟认证文件'
@@ -201,6 +207,12 @@ export function AuthFileCard(props: AuthFileCardProps) {
                 <span className={`${styles.metaValue} ${styles.priorityValue}`}>
                   {priorityValue}
                 </span>
+              </div>
+            )}
+            {projectIdValue && (
+              <div className={styles.metaItem} title={projectIdValue}>
+                <span className={styles.metaLabel}>{t('auth_files.project_id_display')}</span>
+                <span className={styles.metaValue}>{projectIdValue}</span>
               </div>
             )}
           </div>

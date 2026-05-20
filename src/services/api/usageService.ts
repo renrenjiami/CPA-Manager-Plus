@@ -471,6 +471,8 @@ export interface MonitoringAnalyticsEventRow {
   account_snapshot: string;
   auth_label_snapshot: string;
   auth_provider_snapshot: string;
+  auth_project_id_snapshot?: string;
+  resolved_model?: string;
   input_tokens: number;
   output_tokens: number;
   cached_tokens: number;
@@ -750,12 +752,25 @@ export const usageServiceApi = {
   saveApiKeyAliases: async (
     base: string,
     items: ApiKeyAlias[],
-    managementKey?: string
+    managementKey?: string,
+    activeApiKeyHashes?: string[],
+    allowOrphanAliasCleanup?: boolean
   ): Promise<ApiKeyAliasesResponse> => {
     return withUsageServiceError(async () => {
+      const body: {
+        items: ApiKeyAlias[];
+        activeApiKeyHashes?: string[];
+        allowOrphanAliasCleanup?: boolean;
+      } = { items };
+      if (activeApiKeyHashes && activeApiKeyHashes.length > 0) {
+        body.activeApiKeyHashes = activeApiKeyHashes;
+      }
+      if (allowOrphanAliasCleanup) {
+        body.allowOrphanAliasCleanup = true;
+      }
       const response = await axios.put<ApiKeyAliasesResponse>(
         buildUrl(base, '/v0/management/api-key-aliases'),
-        { items },
+        body,
         {
           timeout: USAGE_SERVICE_TIMEOUT_MS,
           headers: authHeaders(managementKey),
