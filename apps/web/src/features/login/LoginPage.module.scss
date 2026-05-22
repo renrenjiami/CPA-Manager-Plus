@@ -1,173 +1,110 @@
 @use '../../styles/variables.scss' as *;
 
-// 主容器 - 左右分栏布局
 .container {
   min-height: 100vh;
   display: flex;
-  background: transparent;
-}
-
-// 左侧品牌展示区
-.brandPanel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   align-items: center;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0)),
-    var(--glass-bg-secondary);
-  border-right: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--app-blur));
-  -webkit-backdrop-filter: blur(var(--app-blur));
-  padding: $spacing-2xl;
-  position: relative;
-  overflow: hidden;
-
-  // 移动端隐藏
-  @media (max-width: $breakpoint-mobile) {
-    display: none;
-  }
-}
-
-// 品牌文字容器
-.brandContent {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: 100%;
-  padding: 0;
-  gap: 0;
-}
-
-// 品牌大字淡入动画
-@keyframes brandFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-10px);
-  }
-  to {
-    opacity: var(--target-opacity, 0.9);
-    transform: translateY(0);
-  }
-}
-
-// 品牌大字
-.brandWord {
-  font-size: 14vw;
-  font-weight: 900;
-  color: var(--app-text-primary);
-  letter-spacing: 0;
-  line-height: 0.85;
-  text-transform: uppercase;
-  font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
-  text-align: right;
-  padding-right: 0;
-  opacity: 0;
-  animation: brandFadeIn 0.8s ease-out forwards;
-
-  // 不同字有不同的透明度和延迟，从上到下依次显现
-  &:nth-child(1) {
-    --target-opacity: 0.95;
-    animation-delay: 0.1s;
-  }
-
-  &:nth-child(2) {
-    --target-opacity: 0.7;
-    animation-delay: 0.35s;
-  }
-
-  &:nth-child(3) {
-    --target-opacity: 0.45;
-    animation-delay: 0.6s;
-  }
-}
-
-// 右侧功能交互区
-.formPanel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
   justify-content: center;
-  align-items: center;
-  padding: $spacing-2xl;
+  padding: 72px 20px 32px;
   background: transparent;
-  position: relative;
 
   @media (max-width: $breakpoint-mobile) {
-    padding: $spacing-lg;
-    min-height: 100vh;
+    padding: 76px 14px 24px;
   }
 }
 
-// 右侧内容容器
-.formContent {
-  width: 100%;
-  max-width: 420px;
+.toolBar {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 20;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: $spacing-xl;
+  gap: 10px;
+
+  @media (max-width: $breakpoint-mobile) {
+    top: 16px;
+    right: 16px;
+  }
 }
 
-.setupFormContent {
-  max-width: min(480px, 100%);
-  gap: 0;
-}
-
-// Logo
-.logo {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
-  object-fit: cover;
-  box-shadow: 0 10px 25px rgba(10, 126, 220, 0.24);
+.toolButton,
+.languageControl {
+  min-height: 38px;
   border: 1px solid var(--glass-border);
-}
-
-// 登录表单卡片
-.loginCard {
-  width: 100%;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--app-radius-lg);
+  border-radius: 10px;
+  background: var(--app-surface-muted);
+  color: var(--text-primary);
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(var(--app-blur));
   -webkit-backdrop-filter: blur(var(--app-blur));
-  padding: 40px 35px;
+}
+
+.toolButton {
+  width: 38px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    transform 0.2s ease;
+
+  &:hover {
+    background: var(--app-surface-strong);
+    transform: translateY(-1px);
+  }
+}
+
+.languageControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.languageSelect {
+  min-width: 112px;
+  flex: 0 0 auto;
+}
+
+.formPanel {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.formContent {
+  width: min(100%, 440px);
+  display: flex;
+  justify-content: center;
+}
+
+.setupFormContent {
+  width: min(100%, 560px);
+}
+
+.loginCard {
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: $spacing-lg;
+  gap: 24px;
+  padding: 40px 35px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--app-radius-lg);
+  background: var(--glass-bg);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--app-blur));
+  -webkit-backdrop-filter: blur(var(--app-blur));
+  animation: cardEnter 0.48s cubic-bezier(0.16, 1, 0.3, 1);
 
   @media (max-width: $breakpoint-mobile) {
-    padding: $spacing-lg;
-    box-shadow: var(--glass-shadow);
-    border: 1px solid var(--glass-border);
-    background: var(--glass-bg);
+    padding: 26px 18px;
+    border-radius: 16px;
   }
 }
 
 .setupCard {
-  position: relative;
-  gap: 18px;
-  padding: 26px 28px 28px;
-  border-radius: var(--app-radius-lg);
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(var(--app-blur));
-  -webkit-backdrop-filter: blur(var(--app-blur));
-
-  @media (max-width: $breakpoint-mobile) {
-    padding: $spacing-lg;
-    border: 1px solid var(--glass-border);
-    border-radius: 18px;
-    background: var(--glass-bg);
-    box-shadow: var(--glass-shadow);
-  }
+  gap: 22px;
 }
 
 .setupCard :global(.btn:not(.btn-sm):not(.btn-xs)) {
@@ -176,124 +113,76 @@
   font-size: 16px;
 }
 
-.setupHeader {
-  position: relative;
+.cardBranding {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  min-height: 114px;
-  padding: 10px 108px 0;
+  gap: 8px;
   text-align: center;
 
   h1 {
-    margin: 0;
+    margin: 8px 0 0;
     color: var(--text-primary);
-    font-size: 30px;
+    font-size: 28px;
     font-weight: 800;
-    line-height: 1.1;
+    line-height: 1.15;
   }
 
   p {
+    max-width: 410px;
     margin: 0;
     color: var(--text-secondary);
-    font-size: 15px;
-    font-weight: 600;
-    line-height: 1.35;
-  }
-
-  @media (max-width: $breakpoint-mobile) {
-    min-height: 0;
-    padding: 54px 0 0;
-
-    h1 {
-      font-size: 30px;
-    }
-
-    p {
-      font-size: 15px;
-    }
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.55;
   }
 }
 
-.setupLanguage {
-  position: absolute;
-  top: 0;
-  right: 0;
-
-  .languageSelect {
-    min-width: 112px;
-  }
-}
-
-.setupLogo {
-  width: 58px;
-  height: 58px;
+.logo {
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
   object-fit: cover;
-  border-radius: 14px;
   box-shadow: 0 10px 25px rgba(10, 126, 220, 0.24);
 }
 
-// 登录头部
-.loginHeader {
+.loginForm,
+.setupFlow {
   display: flex;
   flex-direction: column;
-  gap: $spacing-sm;
-  text-align: center;
+  gap: 18px;
+  min-width: 0;
 }
 
-// 标题行
-.titleRow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: $spacing-sm;
-  flex-wrap: wrap;
-}
-
-// 标题
-.title {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text-primary);
-}
-
-// 副标题
-.subtitle {
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-// 语言下拉选择
-.languageSelect {
-  min-width: 108px;
-  flex: 0 0 auto;
-}
-
-// 连接信息框
 .connectionBox {
-  background: var(--app-surface-muted);
-  border: 1px dashed var(--app-border-strong);
-  border-radius: var(--app-radius-md);
-  padding: $spacing-md;
   display: flex;
   flex-direction: column;
-  gap: $spacing-xs;
+  gap: 6px;
+  padding: 15px 16px;
+  border: 1px solid var(--app-border);
+  border-radius: var(--app-radius-md);
+  background: var(--app-surface-muted);
 
   .label {
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 600;
   }
 
   .value {
-    font-weight: 700;
+    min-width: 0;
     color: var(--text-primary);
-    word-break: break-all;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
   }
 
   .hint {
     color: var(--text-secondary);
     font-size: 12px;
+    line-height: 1.5;
   }
 }
 
@@ -301,22 +190,8 @@
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr);
   gap: 14px;
-  padding: 16px 18px;
-  border-style: solid;
   border-color: color-mix(in srgb, var(--primary-color) 24%, var(--app-border));
-  border-radius: var(--app-radius-md);
   background: color-mix(in srgb, var(--primary-color) 4%, var(--glass-bg));
-
-  .value {
-    font-size: 18px;
-    line-height: 1.3;
-  }
-
-  .hint {
-    margin-top: 4px;
-    font-size: 13px;
-    line-height: 1.6;
-  }
 }
 
 .connectionIcon {
@@ -324,7 +199,7 @@
   place-items: center;
   width: 30px;
   height: 30px;
-  margin-top: 2px;
+  margin-top: 1px;
   border-radius: 50%;
   background: var(--primary-gradient);
   color: var(--primary-contrast, #fff);
@@ -334,18 +209,10 @@
   min-width: 0;
 }
 
-.setupFlow {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  min-width: 0;
-}
-
 .stepper {
   display: flex;
   align-items: flex-start;
-  width: min(390px, 100%);
-  margin: 0 auto;
+  width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
 
@@ -356,7 +223,7 @@
 
 .stepItem {
   position: relative;
-  flex: 1 0 68px;
+  flex: 1 0 76px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -377,10 +244,10 @@
 }
 
 .stepIndex {
-  display: grid;
-  place-items: center;
   position: relative;
   z-index: 1;
+  display: grid;
+  place-items: center;
   width: 32px;
   height: 32px;
   border: 2px solid color-mix(in srgb, var(--app-border) 88%, transparent);
@@ -388,36 +255,33 @@
   background: var(--app-surface-strong);
   color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 700;
-  box-shadow: 0 12px 24px -22px rgba(15, 23, 42, 0.5);
+  font-weight: 800;
 }
 
 .stepLabel {
   width: 100%;
-  overflow-wrap: anywhere;
-  text-align: center;
   color: currentColor;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.3;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
-.stepItemActive {
+.stepItemActive,
+.stepItemDone {
   color: var(--primary-color);
+}
 
-  .stepIndex {
-    border-color: var(--primary-color);
-    background: var(--primary-gradient);
-    color: #ffffff;
-  }
+.stepItemActive .stepIndex {
+  border-color: var(--primary-color);
+  background: var(--primary-gradient);
+  color: #fff;
 }
 
 .stepItemDone {
-  color: var(--primary-color);
-
   .stepIndex {
     border-color: var(--primary-color);
-    background: var(--app-surface-strong);
     color: var(--primary-color);
   }
 
@@ -429,17 +293,16 @@
 .stepPanel {
   display: flex;
   flex-direction: column;
-  gap: 20px;
-  min-height: 310px;
-  padding: 22px 28px;
+  gap: 18px;
+  min-height: 276px;
+  padding: 20px 22px;
   border: 1px solid var(--glass-border);
   border-radius: var(--app-radius-md);
   background: var(--glass-bg-secondary);
 
   @media (max-width: $breakpoint-mobile) {
     min-height: 0;
-    padding: $spacing-md;
-    border-radius: 14px;
+    padding: 16px;
   }
 }
 
@@ -451,13 +314,9 @@
   h2 {
     margin: 0;
     color: var(--text-primary);
-    font-size: 25px;
+    font-size: 22px;
     font-weight: 800;
     line-height: 1.2;
-
-    @media (max-width: $breakpoint-mobile) {
-      font-size: 24px;
-    }
   }
 }
 
@@ -468,7 +327,7 @@
   border-radius: 9px;
   background: color-mix(in srgb, var(--primary-color) 12%, var(--bg-primary));
   color: var(--primary-color);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 800;
 }
 
@@ -482,9 +341,9 @@
   }
 
   :global(.form-group > label) {
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
   }
 
@@ -492,13 +351,13 @@
     min-height: 48px;
     border-radius: var(--app-radius-sm);
     background: var(--app-input-bg);
-    font-size: 16px;
+    font-size: 15px;
   }
 
   :global(.hint) {
-    margin-top: 4px;
-    font-size: 13px;
-    line-height: 1.6;
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.55;
   }
 }
 
@@ -506,7 +365,7 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   border: 1px solid color-mix(in srgb, var(--primary-color) 28%, var(--app-border));
   border-radius: var(--app-radius-md);
   background: var(--app-surface-muted);
@@ -514,18 +373,9 @@
   p {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.65;
   }
-}
-
-.authFieldBox {
-  display: grid;
-  gap: 16px;
-  padding: 20px 22px;
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-md);
-  background: var(--app-surface-muted);
 }
 
 .reviewGrid {
@@ -560,7 +410,7 @@
 
   span {
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 13px;
   }
 
   .reviewIcon {
@@ -577,7 +427,7 @@
     min-width: 0;
     justify-self: end;
     color: var(--text-primary);
-    font-size: 15px;
+    font-size: 14px;
     overflow-wrap: anywhere;
   }
 }
@@ -585,11 +435,11 @@
 .stepActions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 
   button {
-    border-radius: 12px;
-    font-size: 16px;
+    border-radius: 10px;
+    font-size: 15px;
   }
 
   @media (max-width: $breakpoint-mobile) {
@@ -602,14 +452,11 @@
   background: var(--app-surface-muted) !important;
 }
 
-.setupNextButton {
-  > span {
-    display: inline-flex;
-    align-items: center;
-  }
+.setupNextButton > span {
+  display: inline-flex;
+  align-items: center;
 }
 
-// 复选框行
 .toggleAdvanced {
   display: flex;
   justify-content: flex-start;
@@ -622,23 +469,31 @@
   font-weight: 500;
 }
 
-// 错误提示框
 .errorBox {
-  background: rgba($error-color, 0.1);
+  padding: 10px 12px;
   border: 1px solid rgba($error-color, 0.4);
   border-radius: $radius-md;
-  padding: $spacing-sm $spacing-md;
+  background: rgba($error-color, 0.1);
   color: $error-color;
-  font-size: 14px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
-// ========== 启动动画（右侧） ==========
+@keyframes cardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
 
-// 启动动画进入效果
 @keyframes splashEnter {
   from {
     opacity: 0;
-    transform: scale(0.9) translateY(20px);
+    transform: scale(0.94) translateY(16px);
   }
   to {
     opacity: 1;
@@ -646,7 +501,6 @@
   }
 }
 
-// Logo 脉冲效果
 @keyframes splashLogoPulse {
   0%,
   100% {
@@ -657,7 +511,6 @@
   }
 }
 
-// 加载条动画
 @keyframes splashLoading {
   0% {
     transform: scaleX(0);
@@ -676,7 +529,6 @@
   }
 }
 
-// 启动动画内容容器
 .splashContent {
   display: flex;
   flex-direction: column;
@@ -685,48 +537,43 @@
   animation: splashEnter 0.6s ease-out;
 }
 
-// 启动动画 Logo
 .splashLogo {
+  width: 80px;
   height: 80px;
-  width: auto;
   border-radius: $radius-lg;
+  object-fit: cover;
   box-shadow: var(--glass-shadow);
   animation: splashLogoPulse 1.5s ease-in-out infinite;
 }
 
-// 启动动画标题
 .splashTitle {
+  margin: 0;
+  color: var(--text-primary);
   font-size: 28px;
   font-weight: 800;
-  color: var(--text-primary);
-  margin: 0;
-  letter-spacing: -0.5px;
+  letter-spacing: 0;
 }
 
-// 启动动画副标题
 .splashSubtitle {
+  margin: -8px 0 0;
+  color: var(--text-secondary);
   font-size: 16px;
   font-weight: 500;
-  color: var(--text-secondary);
-  margin: 0;
-  margin-top: -8px;
 }
 
-// 启动动画加载条容器
 .splashLoader {
   width: 120px;
   height: 3px;
-  background: var(--border-color);
-  border-radius: $radius-full;
-  overflow: hidden;
   margin-top: $spacing-md;
+  overflow: hidden;
+  border-radius: $radius-full;
+  background: var(--border-color);
 }
 
-// 启动动画加载条
 .splashLoaderBar {
   width: 100%;
   height: 100%;
-  background: var(--primary-gradient);
   border-radius: $radius-full;
+  background: var(--primary-gradient);
   animation: splashLoading 1.2s ease-in-out infinite;
 }

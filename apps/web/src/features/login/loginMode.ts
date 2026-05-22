@@ -2,8 +2,10 @@ import { isUsageServiceId, type UsageServiceInfo } from '@/services/api/usageSer
 
 export const resolveUsageServiceLoginMode = (info?: UsageServiceInfo | null) => {
   const hostedByUsageService = isUsageServiceId(info?.service);
+  const projectInitialized = info?.projectInitialized ?? info?.configured;
   return {
     hostedByUsageService,
-    usageServiceNeedsSetup: hostedByUsageService && info?.configured !== true,
+    usageServiceNeedsSetup:
+      hostedByUsageService && (info?.setupRequired === true || projectInitialized !== true),
   };
 };

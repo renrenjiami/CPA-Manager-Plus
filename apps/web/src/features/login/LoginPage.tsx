@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, useCallback } from 'react';
-import { Navigate, useNavigate, useLocation } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -11,13 +11,17 @@ import {
   IconEyeOff,
   IconInfo,
   IconKey,
+  IconLanguages,
+  IconMoon,
   IconShield,
+  IconSun,
   IconTimer,
 } from '@/components/ui/icons';
 import {
   useAuthStore,
   useLanguageStore,
   useNotificationStore,
+  useThemeStore,
   useUsageServiceStore,
 } from '@/stores';
 import {
@@ -38,11 +42,8 @@ import type { ApiError } from '@/types';
 import { resolveUsageServiceLoginMode } from './loginMode';
 import styles from './LoginPage.module.scss';
 
-/**
- * 将 API 错误转换为本地化的用户友好消息
- */
 type RedirectState = { from?: { pathname?: string } };
-type UsageSetupStep = 'connection' | 'auth' | 'monitoring' | 'polling' | 'review';
+type UsageSetupStep = 'admin' | 'connection' | 'cpaKey' | 'monitoring' | 'polling' | 'review';
 
 function getLocalizedErrorMessage(
   error: unknown,
@@ -67,21 +68,10 @@ function getLocalizedErrorMessage(
           ? error
           : '';
 
-  // 根据 HTTP 状态码判断
-  if (status === 401) {
-    return t('login.error_unauthorized');
-  }
-  if (status === 403) {
-    return t('login.error_forbidden');
-  }
-  if (status === 404) {
-    return t('login.error_not_found');
-  }
-  if (status && status >= 500) {
-    return t('login.error_server');
-  }
-
-  // 根据 axios 错误码判断
+  if (status === 401) return t('login.error_unauthorized');
+  if (status === 403) return t('login.error_forbidden');
+  if (status === 404) return t('login.error_not_found');
+  if (status && status >= 500) return t('login.error_server');
   if (code === 'ECONNABORTED' || message.toLowerCase().includes('timeout')) {
     return t('login.error_timeout');
   }
@@ -91,13 +81,10 @@ function getLocalizedErrorMessage(
   if (code === 'ERR_CERT_AUTHORITY_INVALID' || message.toLowerCase().includes('certificate')) {
     return t('login.error_ssl');
   }
-
-  // 检查 CORS 错误
   if (message.toLowerCase().includes('cors') || message.toLowerCase().includes('cross-origin')) {
     return t('login.error_cors');
   }
 
-  // 默认错误消息
   return t('login.error_invalid');
 }
 
@@ -108,6 +95,8 @@ export function LoginPage() {
   const { showNotification } = useNotificationStore();
   const language = useLanguageStore((state) => state.language);
   const setLanguage = useLanguageStore((state) => state.setLanguage);
+  const theme = useThemeStore((state) => state.theme);
+  const cycleTheme = useThemeStore((state) => state.cycleTheme);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const login = useAuthStore((state) => state.login);
   const restoreSession = useAuthStore((state) => state.restoreSession);
@@ -117,10 +106,12 @@ export function LoginPage() {
   const setUsageServiceConfig = useUsageServiceStore((state) => state.setUsageServiceConfig);
 
   const [apiBase, setApiBase] = useState('');
-  const [managementKey, setManagementKey] = useState('');
+  const [adminKey, setAdminKey] = useState('');
+  const [cpaManagementKey, setCPAManagementKey] = useState('');
   const [showCustomBase, setShowCustomBase] = useState(false);
-  const [showKey, setShowKey] = useState(false);
-  const [rememberPassword, setRememberPassword] = useState(false);
+  const [showAdminKey, setShowAdminKey] = useState(false);
+  const [showCPAManagementKey, setShowCPAManagementKey] = useState(false);
+  const [rememberCredential, setRememberCredential] = useState(false);
   const [requestMonitoringEnabled, setRequestMonitoringEnabled] = useState(true);
   const [pollIntervalMs, setPollIntervalMs] = useState('500');
   const [loading, setLoading] = useState(false);
@@ -129,13 +120,28 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [hostedByUsageService, setHostedByUsageService] = useState(false);
   const [usageServiceNeedsSetup, setUsageServiceNeedsSetup] = useState(false);
-  const [usageSetupStep, setUsageSetupStep] = useState<UsageSetupStep>('connection');
+  const [hasHistoricalData, setHasHistoricalData] = useState(false);
+  const [migrationStatus, setMigrationStatus] = useState('');
+  const [usageSetupStep, setUsageSetupStep] = useState<UsageSetupStep>('admin');
 
   const detectedBase = useMemo(() => detectApiBaseFromLocation(), []);
+  const isManagerServerMode = hostedByUsageService;
+  const loginCredential = isManagerServerMode ? adminKey : cpaManagementKey;
+  const loginCredentialLabel = isManagerServerMode
+    ? t('login.admin_key_label')
+    : t('login.cpa_management_key_label');
+  const loginCredentialPlaceholder = isManagerServerMode
+    ? t('login.admin_key_placeholder')
+    : t('login.cpa_management_key_placeholder');
+  const loginCredentialHint = isManagerServerMode
+    ? t('login.admin_key_hint')
+    : t('login.cpa_management_key_hint');
+
   const usageSetupSteps = useMemo<UsageSetupStep[]>(
     () => [
+      'admin',
       'connection',
-      'auth',
+      'cpaKey',
       'monitoring',
       ...(requestMonitoringEnabled ? (['polling'] as UsageSetupStep[]) : []),
       'review',
@@ -147,8 +153,9 @@ export function LoginPage() {
   const usageSetupIsLastStep = usageSetupStep === 'review';
   const usageSetupStepLabels = useMemo<Record<UsageSetupStep, string>>(
     () => ({
+      admin: t('login.step_admin_key'),
       connection: t('login.step_connection'),
-      auth: t('login.step_auth'),
+      cpaKey: t('login.step_cpa_key'),
       monitoring: t('login.step_monitoring'),
       polling: t('login.step_polling'),
       review: t('login.step_review'),
@@ -163,12 +170,12 @@ export function LoginPage() {
       })),
     [t]
   );
+
   const handleLanguageChange = useCallback(
     (selectedLanguage: string) => {
-      if (!isSupportedLanguage(selectedLanguage)) {
-        return;
+      if (isSupportedLanguage(selectedLanguage)) {
+        setLanguage(selectedLanguage);
       }
-      setLanguage(selectedLanguage);
     },
     [setLanguage]
   );
@@ -185,11 +192,15 @@ export function LoginPage() {
           detectedUsageServiceConfigured = detectedUsageService && !mode.usageServiceNeedsSetup;
           setHostedByUsageService(mode.hostedByUsageService);
           setUsageServiceNeedsSetup(mode.usageServiceNeedsSetup);
+          setHasHistoricalData(Boolean(info.hasHistoricalData));
+          setMigrationStatus(info.migrationStatus || '');
         } catch {
           detectedUsageService = false;
           detectedUsageServiceConfigured = false;
           setHostedByUsageService(false);
           setUsageServiceNeedsSetup(false);
+          setHasHistoricalData(false);
+          setMigrationStatus('');
         }
 
         const autoLoggedIn = await restoreSession();
@@ -198,33 +209,37 @@ export function LoginPage() {
         }
         if (autoLoggedIn) {
           setAutoLoginSuccess(true);
-          // 延迟跳转，让用户看到成功动画
           setTimeout(() => {
             const redirect = (location.state as RedirectState | null)?.from?.pathname || '/';
             navigate(redirect, { replace: true });
           }, 1500);
-        } else {
-          const lastCPAForUsageService =
-            localStorage.getItem(USAGE_SERVICE_LAST_CPA_BASE_KEY) ||
-            localStorage.getItem(LEGACY_USAGE_SERVICE_LAST_CPA_BASE_KEY) ||
-            '';
-          const defaultCPAConnectionBase = resolveDefaultCPAConnectionBase({
-            hostedByUsageService: detectedUsageService,
-            currentBase: detectedBase,
-          });
-          setApiBase(
-            detectedUsageService
-              ? detectedUsageServiceConfigured
-                ? detectedBase
-                : lastCPAForUsageService || defaultCPAConnectionBase
-              : storedBase || detectedBase
-          );
-          if (detectedUsageService && !detectedUsageServiceConfigured) {
-            setShowCustomBase(true);
-          }
-          setManagementKey(storedKey || '');
-          setRememberPassword(storedRememberPassword || Boolean(storedKey));
+          return;
         }
+
+        const lastCPAForUsageService =
+          localStorage.getItem(USAGE_SERVICE_LAST_CPA_BASE_KEY) ||
+          localStorage.getItem(LEGACY_USAGE_SERVICE_LAST_CPA_BASE_KEY) ||
+          '';
+        const defaultCPAConnectionBase = resolveDefaultCPAConnectionBase({
+          hostedByUsageService: detectedUsageService,
+          currentBase: detectedBase,
+        });
+        setApiBase(
+          detectedUsageService
+            ? detectedUsageServiceConfigured
+              ? detectedBase
+              : lastCPAForUsageService || defaultCPAConnectionBase
+            : storedBase || detectedBase
+        );
+        setShowCustomBase(detectedUsageService && !detectedUsageServiceConfigured);
+        if (detectedUsageService) {
+          setAdminKey(storedKey || '');
+          setCPAManagementKey('');
+        } else {
+          setAdminKey('');
+          setCPAManagementKey(storedKey || '');
+        }
+        setRememberCredential(storedRememberPassword || Boolean(storedKey));
       } finally {
         if (!autoLoginSuccess) {
           setAutoLoading(false);
@@ -244,12 +259,16 @@ export function LoginPage() {
 
   const validateUsageSetupStep = useCallback(
     (step: UsageSetupStep) => {
+      if (step === 'admin' && !adminKey.trim()) {
+        setError(t('login.admin_key_required'));
+        return false;
+      }
       if (step === 'connection' && !apiBase.trim()) {
         setError(t('login.cpa_address_required'));
         return false;
       }
-      if (step === 'auth' && !managementKey.trim()) {
-        setError(t('login.error_required'));
+      if (step === 'cpaKey' && !cpaManagementKey.trim()) {
+        setError(t('login.cpa_management_key_required'));
         return false;
       }
       if (step === 'polling') {
@@ -266,7 +285,7 @@ export function LoginPage() {
       setError('');
       return true;
     },
-    [apiBase, managementKey, pollIntervalMs, t]
+    [adminKey, apiBase, cpaManagementKey, pollIntervalMs, t]
   );
 
   const handleUsageSetupNext = useCallback(() => {
@@ -289,16 +308,33 @@ export function LoginPage() {
       return;
     }
 
-    if (!managementKey.trim()) {
-      setError(t('login.error_required'));
+    const trimmedAdminKey = adminKey.trim();
+    const trimmedCPAKey = cpaManagementKey.trim();
+    const baseToUse = apiBase ? normalizeApiBase(apiBase) : detectedBase;
+
+    if (usageServiceNeedsSetup) {
+      if (!trimmedAdminKey) {
+        setError(t('login.admin_key_required'));
+        return;
+      }
+      if (!apiBase.trim()) {
+        setError(t('login.cpa_address_required'));
+        return;
+      }
+      if (!trimmedCPAKey) {
+        setError(t('login.cpa_management_key_required'));
+        return;
+      }
+    } else if (isManagerServerMode) {
+      if (!trimmedAdminKey) {
+        setError(t('login.admin_key_required'));
+        return;
+      }
+    } else if (!trimmedCPAKey) {
+      setError(t('login.cpa_management_key_required'));
       return;
     }
 
-    const baseToUse = apiBase ? normalizeApiBase(apiBase) : detectedBase;
-    if (usageServiceNeedsSetup && !apiBase.trim()) {
-      setError(t('login.cpa_address_required'));
-      return;
-    }
     const parsedPollIntervalMs = Number(pollIntervalMs);
     if (
       usageServiceNeedsSetup &&
@@ -315,22 +351,27 @@ export function LoginPage() {
     setError('');
     try {
       if (usageServiceNeedsSetup) {
-        await usageServiceApi.setup(detectedBase, {
-          cpaBaseUrl: baseToUse,
-          managementKey: managementKey.trim(),
-          pollIntervalMs: requestMonitoringEnabled ? parsedPollIntervalMs : undefined,
-          ensureUsageStatisticsEnabled: requestMonitoringEnabled,
-          requestMonitoringEnabled,
-        });
+        await usageServiceApi.setup(
+          detectedBase,
+          {
+            cpaBaseUrl: baseToUse,
+            cpaManagementKey: trimmedCPAKey,
+            pollIntervalMs: requestMonitoringEnabled ? parsedPollIntervalMs : undefined,
+            ensureUsageStatisticsEnabled: requestMonitoringEnabled,
+            requestMonitoringEnabled,
+          },
+          trimmedAdminKey
+        );
         setUsageServiceConfig({ enabled: true, serviceBase: detectedBase });
         localStorage.setItem(USAGE_SERVICE_LAST_CPA_BASE_KEY, baseToUse);
-      } else if (hostedByUsageService) {
+      } else if (isManagerServerMode) {
         setUsageServiceConfig({ enabled: true, serviceBase: detectedBase });
       }
+
       await login({
-        apiBase: hostedByUsageService ? detectedBase : baseToUse,
-        managementKey: managementKey.trim(),
-        rememberPassword,
+        apiBase: isManagerServerMode ? detectedBase : baseToUse,
+        managementKey: isManagerServerMode ? trimmedAdminKey : trimmedCPAKey,
+        rememberPassword: rememberCredential,
       });
       showNotification(t('common.connected_status'), 'success');
       navigate('/', { replace: true });
@@ -342,18 +383,19 @@ export function LoginPage() {
       setLoading(false);
     }
   }, [
+    adminKey,
     apiBase,
+    cpaManagementKey,
     detectedBase,
     handleUsageSetupNext,
-    hostedByUsageService,
+    isManagerServerMode,
     login,
-    managementKey,
     navigate,
     pollIntervalMs,
+    rememberCredential,
     requestMonitoringEnabled,
-    rememberPassword,
-    showNotification,
     setUsageServiceConfig,
+    showNotification,
     t,
     usageServiceNeedsSetup,
     usageSetupIsLastStep,
@@ -366,7 +408,7 @@ export function LoginPage() {
         handleSubmit();
       }
     },
-    [loading, handleSubmit]
+    [handleSubmit, loading]
   );
 
   if (isAuthenticated && !autoLoading && !autoLoginSuccess) {
@@ -374,26 +416,49 @@ export function LoginPage() {
     return <Navigate to={redirect} replace />;
   }
 
-  // 显示启动动画（自动登录中或自动登录成功）
   const showSplash = autoLoading || autoLoginSuccess;
+
+  const renderKeyToggle = (visible: boolean, toggle: () => void) => (
+    <button
+      type="button"
+      className="btn btn-ghost btn-xs btn-icon-only"
+      onClick={toggle}
+      aria-label={visible ? t('login.hide_key') : t('login.show_key')}
+      title={visible ? t('login.hide_key') : t('login.show_key')}
+    >
+      {visible ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+    </button>
+  );
 
   return (
     <div className={styles.container}>
-      {/* 左侧品牌展示区 */}
-      <div className={styles.brandPanel}>
-        <div className={styles.brandContent}>
-          <span className={styles.brandWord}>CLI</span>
-          <span className={styles.brandWord}>PROXY</span>
-          <span className={styles.brandWord}>API</span>
+      <div className={styles.toolBar}>
+        <button
+          type="button"
+          className={styles.toolButton}
+          onClick={cycleTheme}
+          aria-label={t('theme.switch')}
+          title={t('theme.switch')}
+        >
+          {theme === 'dark' ? <IconMoon size={17} /> : <IconSun size={17} />}
+        </button>
+        <div className={styles.languageControl}>
+          <IconLanguages size={16} />
+          <Select
+            className={styles.languageSelect}
+            value={language}
+            options={languageOptions}
+            onChange={handleLanguageChange}
+            fullWidth={false}
+            ariaLabel={t('language.switch')}
+          />
         </div>
       </div>
 
-      {/* 右侧功能交互区 */}
       <div className={styles.formPanel}>
         {showSplash ? (
-          /* 启动动画 */
           <div className={styles.splashContent}>
-            <img src={INLINE_LOGO_JPEG} alt="CPAMC" className={styles.splashLogo} />
+            <img src={INLINE_LOGO_JPEG} alt="CPAMP" className={styles.splashLogo} />
             <h1 className={styles.splashTitle}>{t('splash.title')}</h1>
             <p className={styles.splashSubtitle}>{t('splash.subtitle')}</p>
             <div className={styles.splashLoader}>
@@ -401,53 +466,23 @@ export function LoginPage() {
             </div>
           </div>
         ) : (
-          /* 登录表单 */
           <div
             className={`${styles.formContent} ${
               usageServiceNeedsSetup ? styles.setupFormContent : ''
             }`}
           >
-            {/* Logo */}
-            {!usageServiceNeedsSetup && (
-              <img src={INLINE_LOGO_JPEG} alt="Logo" className={styles.logo} />
-            )}
-
-            {/* 登录表单卡片 */}
-            <div
-              className={`${styles.loginCard} ${usageServiceNeedsSetup ? styles.setupCard : ''}`}
-            >
-              {usageServiceNeedsSetup ? (
-                <div className={styles.setupHeader}>
-                  <div className={styles.setupLanguage}>
-                    <Select
-                      className={styles.languageSelect}
-                      value={language}
-                      options={languageOptions}
-                      onChange={handleLanguageChange}
-                      fullWidth={false}
-                      ariaLabel={t('language.switch')}
-                    />
-                  </div>
-                  <img src={INLINE_LOGO_JPEG} alt="Logo" className={styles.setupLogo} />
-                  <h1>CPA Manager Plus</h1>
-                  <p>{t('login.setup_title')}</p>
-                </div>
-              ) : (
-                <div className={styles.loginHeader}>
-                  <div className={styles.titleRow}>
-                    <div className={styles.title}>{t('title.login')}</div>
-                    <Select
-                      className={styles.languageSelect}
-                      value={language}
-                      options={languageOptions}
-                      onChange={handleLanguageChange}
-                      fullWidth={false}
-                      ariaLabel={t('language.switch')}
-                    />
-                  </div>
-                  <div className={styles.subtitle}>{t('login.subtitle')}</div>
-                </div>
-              )}
+            <div className={`${styles.loginCard} ${usageServiceNeedsSetup ? styles.setupCard : ''}`}>
+              <div className={styles.cardBranding}>
+                <img src={INLINE_LOGO_JPEG} alt="CPA Manager Plus" className={styles.logo} />
+                <h1>CPA Manager Plus</h1>
+                <p>
+                  {usageServiceNeedsSetup
+                    ? t('login.docker_setup_subtitle')
+                    : isManagerServerMode
+                      ? t('login.docker_login_subtitle')
+                      : t('login.subtitle')}
+                </p>
+              </div>
 
               {usageServiceNeedsSetup && (
                 <div className={styles.setupFlow}>
@@ -483,52 +518,67 @@ export function LoginPage() {
                       <h2>{usageSetupStepLabels[usageSetupStep]}</h2>
                     </div>
 
-                    {usageSetupStep === 'connection' && (
+                    {usageSetupStep === 'admin' && (
                       <div className={styles.stepFields}>
                         <div className={styles.connectionBox}>
                           <div className={styles.connectionIcon}>
-                            <IconInfo size={18} />
+                            <IconShield size={18} />
                           </div>
                           <div className={styles.connectionCopy}>
                             <div className={styles.label}>{t('login.usage_service_address')}</div>
                             <div className={styles.value}>{detectedBase}</div>
-                            <div className={styles.hint}>{t('login.usage_service_mode_hint')}</div>
+                            <div className={styles.hint}>
+                              {hasHistoricalData || migrationStatus
+                                ? t('login.migration_detected_hint')
+                                : t('login.admin_key_setup_hint')}
+                            </div>
                           </div>
                         </div>
+                        <Input
+                          autoFocus
+                          label={t('login.admin_key_label')}
+                          placeholder={t('login.admin_key_placeholder')}
+                          type={showAdminKey ? 'text' : 'password'}
+                          value={adminKey}
+                          onChange={(event) => setAdminKey(event.target.value)}
+                          onKeyDown={handleSubmitKeyDown}
+                          hint={t('login.admin_key_hint')}
+                          rightElement={renderKeyToggle(showAdminKey, () =>
+                            setShowAdminKey((prev) => !prev)
+                          )}
+                        />
+                      </div>
+                    )}
+
+                    {usageSetupStep === 'connection' && (
+                      <div className={styles.stepFields}>
                         <Input
                           autoFocus
                           label={t('login.cpa_connection_label')}
                           placeholder={t('login.cpa_connection_placeholder')}
                           value={apiBase}
-                          onChange={(e) => setApiBase(e.target.value)}
+                          onChange={(event) => setApiBase(event.target.value)}
                           onKeyDown={handleSubmitKeyDown}
                           hint={t('login.cpa_connection_hint')}
                         />
                       </div>
                     )}
 
-                    {usageSetupStep === 'auth' && (
+                    {usageSetupStep === 'cpaKey' && (
                       <div className={styles.stepFields}>
-                        <div className={styles.authFieldBox}>
-                          <Input
-                            autoFocus
-                            label={t('login.management_key_label')}
-                            placeholder={t('login.management_key_placeholder')}
-                            type={showKey ? 'text' : 'password'}
-                            value={managementKey}
-                            onChange={(e) => setManagementKey(e.target.value)}
-                            onKeyDown={handleSubmitKeyDown}
-                          />
-                          <div className={styles.toggleAdvanced}>
-                            <SelectionCheckbox
-                              checked={rememberPassword}
-                              onChange={setRememberPassword}
-                              ariaLabel={t('login.remember_password_label')}
-                              label={t('login.remember_password_label')}
-                              labelClassName={styles.toggleLabel}
-                            />
-                          </div>
-                        </div>
+                        <Input
+                          autoFocus
+                          label={t('login.cpa_management_key_label')}
+                          placeholder={t('login.cpa_management_key_placeholder')}
+                          type={showCPAManagementKey ? 'text' : 'password'}
+                          value={cpaManagementKey}
+                          onChange={(event) => setCPAManagementKey(event.target.value)}
+                          onKeyDown={handleSubmitKeyDown}
+                          hint={t('login.cpa_management_key_hint')}
+                          rightElement={renderKeyToggle(showCPAManagementKey, () =>
+                            setShowCPAManagementKey((prev) => !prev)
+                          )}
+                        />
                       </div>
                     )}
 
@@ -560,7 +610,7 @@ export function LoginPage() {
                           min="1"
                           placeholder="500"
                           value={pollIntervalMs}
-                          onChange={(e) => setPollIntervalMs(e.target.value)}
+                          onChange={(event) => setPollIntervalMs(event.target.value)}
                           onKeyDown={handleSubmitKeyDown}
                           hint={t('login.poll_interval_hint')}
                         />
@@ -569,6 +619,13 @@ export function LoginPage() {
 
                     {usageSetupStep === 'review' && (
                       <div className={styles.reviewGrid}>
+                        <div>
+                          <span className={styles.reviewIcon}>
+                            <IconShield size={18} />
+                          </span>
+                          <span>{t('login.admin_key_label')}</span>
+                          <strong>{adminKey ? '************' : '-'}</strong>
+                        </div>
                         <div>
                           <span className={styles.reviewIcon}>
                             <IconInfo size={18} />
@@ -580,8 +637,8 @@ export function LoginPage() {
                           <span className={styles.reviewIcon}>
                             <IconKey size={18} />
                           </span>
-                          <span>{t('login.management_key_label')}</span>
-                          <strong>{managementKey ? '••••••••••••' : '-'}</strong>
+                          <span>{t('login.cpa_management_key_label')}</span>
+                          <strong>{cpaManagementKey ? '************' : '-'}</strong>
                         </div>
                         <div>
                           <span className={styles.reviewIcon}>
@@ -601,15 +658,6 @@ export function LoginPage() {
                             <strong>{pollIntervalMs}</strong>
                           </div>
                         )}
-                        <div>
-                          <span className={styles.reviewIcon}>
-                            <IconShield size={18} />
-                          </span>
-                          <span>{t('login.remember_password_label')}</span>
-                          <strong>
-                            {rememberPassword ? t('common.enabled') : t('common.disabled')}
-                          </strong>
-                        </div>
                       </div>
                     )}
                   </div>
@@ -631,7 +679,7 @@ export function LoginPage() {
                         onClick={handleSubmit}
                         loading={loading}
                       >
-                        {loading ? t('login.submitting') : t('login.submit_button')}
+                        {loading ? t('login.initializing') : t('login.initialize_button')}
                       </Button>
                     ) : (
                       <Button
@@ -647,18 +695,18 @@ export function LoginPage() {
               )}
 
               {!usageServiceNeedsSetup && (
-                <>
+                <div className={styles.loginForm}>
                   <div className={styles.connectionBox}>
                     <div className={styles.label}>{t('login.connection_current')}</div>
                     <div className={styles.value}>{apiBase || detectedBase}</div>
                     <div className={styles.hint}>
-                      {hostedByUsageService
+                      {isManagerServerMode
                         ? t('login.usage_service_configured_hint')
                         : t('login.connection_auto_hint')}
                     </div>
                   </div>
 
-                  {!hostedByUsageService && (
+                  {!isManagerServerMode && (
                     <>
                       <div className={styles.toggleAdvanced}>
                         <SelectionCheckbox
@@ -675,7 +723,7 @@ export function LoginPage() {
                           label={t('login.custom_connection_label')}
                           placeholder={t('login.custom_connection_placeholder')}
                           value={apiBase}
-                          onChange={(e) => setApiBase(e.target.value)}
+                          onChange={(event) => setApiBase(event.target.value)}
                           hint={t('login.custom_connection_hint')}
                         />
                       )}
@@ -684,31 +732,34 @@ export function LoginPage() {
 
                   <Input
                     autoFocus
-                    label={t('login.management_key_label')}
-                    placeholder={t('login.management_key_placeholder')}
-                    type={showKey ? 'text' : 'password'}
-                    value={managementKey}
-                    onChange={(e) => setManagementKey(e.target.value)}
-                    onKeyDown={handleSubmitKeyDown}
-                    rightElement={
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-xs btn-icon-only"
-                        onClick={() => setShowKey((prev) => !prev)}
-                        aria-label={showKey ? t('login.hide_key') : t('login.show_key')}
-                        title={showKey ? t('login.hide_key') : t('login.show_key')}
-                      >
-                        {showKey ? <IconEyeOff size={16} /> : <IconEye size={16} />}
-                      </button>
+                    label={loginCredentialLabel}
+                    placeholder={loginCredentialPlaceholder}
+                    type={
+                      (isManagerServerMode ? showAdminKey : showCPAManagementKey) ? 'text' : 'password'
                     }
+                    value={loginCredential}
+                    onChange={(event) =>
+                      isManagerServerMode
+                        ? setAdminKey(event.target.value)
+                        : setCPAManagementKey(event.target.value)
+                    }
+                    onKeyDown={handleSubmitKeyDown}
+                    hint={loginCredentialHint}
+                    rightElement={renderKeyToggle(
+                      isManagerServerMode ? showAdminKey : showCPAManagementKey,
+                      () =>
+                        isManagerServerMode
+                          ? setShowAdminKey((prev) => !prev)
+                          : setShowCPAManagementKey((prev) => !prev)
+                    )}
                   />
 
                   <div className={styles.toggleAdvanced}>
                     <SelectionCheckbox
-                      checked={rememberPassword}
-                      onChange={setRememberPassword}
-                      ariaLabel={t('login.remember_password_label')}
-                      label={t('login.remember_password_label')}
+                      checked={rememberCredential}
+                      onChange={setRememberCredential}
+                      ariaLabel={t('login.remember_credential_label')}
+                      label={t('login.remember_credential_label')}
                       labelClassName={styles.toggleLabel}
                     />
                   </div>
@@ -718,7 +769,7 @@ export function LoginPage() {
                   </Button>
 
                   {error && <div className={styles.errorBox}>{error}</div>}
-                </>
+                </div>
               )}
             </div>
           </div>

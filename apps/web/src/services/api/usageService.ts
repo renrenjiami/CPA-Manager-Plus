@@ -15,6 +15,7 @@ const USAGE_SERVICE_ERROR_CODES = new Set([
   'enable_cpa_usage_statistics_failed',
   'setup_env_managed',
   'invalid_existing_management_key',
+  'invalid_admin_key',
   'invalid_management_key',
   'usage_service_not_configured',
   'prices_required',
@@ -36,6 +37,12 @@ export interface UsageServiceInfo {
   mode?: string;
   startedAt?: number;
   configured?: boolean;
+  adminReady?: boolean;
+  projectInitialized?: boolean;
+  setupRequired?: boolean;
+  migrationStatus?: string;
+  dataKeyReady?: boolean;
+  hasHistoricalData?: boolean;
 }
 
 export interface UsageServiceCollectorStatus {
@@ -62,7 +69,8 @@ export interface UsageServiceStatus {
 
 export interface UsageServiceSetupRequest {
   cpaBaseUrl: string;
-  managementKey: string;
+  cpaManagementKey: string;
+  managementKey?: string;
   collectorMode?: string;
   queue?: string;
   popSide?: string;
@@ -566,7 +574,7 @@ const readUsageServiceErrorCode = (value: unknown): string => {
 const fallbackUsageServiceCodeByStatus = (status?: number): string => {
   switch (status) {
     case 401:
-      return 'invalid_management_key';
+      return 'invalid_admin_key';
     case 405:
       return 'method_not_allowed';
     case 412:
@@ -601,7 +609,7 @@ const toUsageServiceApiError = (error: unknown): UsageServiceApiError => {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
     const message =
-      readUsageServiceErrorMessage(data) || error.message || 'Usage Service request failed';
+      readUsageServiceErrorMessage(data) || error.message || 'Manager Server request failed';
     const apiError = new Error(message) as UsageServiceApiError;
     apiError.name = 'UsageServiceApiError';
     apiError.status = error.response?.status;
@@ -613,7 +621,7 @@ const toUsageServiceApiError = (error: unknown): UsageServiceApiError => {
 
   if (error instanceof Error) return error as UsageServiceApiError;
   const fallback = new Error(
-    typeof error === 'string' ? error : 'Usage Service request failed'
+    typeof error === 'string' ? error : 'Manager Server request failed'
   ) as UsageServiceApiError;
   fallback.name = 'UsageServiceApiError';
   return fallback;
@@ -665,10 +673,15 @@ export const usageServiceApi = {
     });
   },
 
-  setup: async (base: string, payload: UsageServiceSetupRequest): Promise<void> => {
+  setup: async (
+    base: string,
+    payload: UsageServiceSetupRequest,
+    adminKey?: string
+  ): Promise<void> => {
     await withUsageServiceError(async () => {
       await axios.post(buildUrl(base, '/setup'), payload, {
         timeout: USAGE_SERVICE_TIMEOUT_MS,
+        headers: authHeaders(adminKey),
       });
     });
   },
