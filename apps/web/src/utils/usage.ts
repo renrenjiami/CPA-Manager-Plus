@@ -695,8 +695,24 @@ export function formatCompactNumber(value: number): string {
 
   const abs = Math.abs(num);
   if (abs === 0) return '0';
-  if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  const units = [
+    { threshold: 1_000_000_000_000_000, suffix: 'P' },
+    { threshold: 1_000_000_000_000, suffix: 'T' },
+    { threshold: 1_000_000_000, suffix: 'B' },
+    { threshold: 1_000_000, suffix: 'M' },
+    { threshold: 1_000, suffix: 'K' },
+  ];
+  const unit = units.find((item) => abs >= item.threshold);
+
+  if (unit) {
+    const formatted = (num / unit.threshold).toFixed(1);
+    const nextUnit = units[units.indexOf(unit) - 1];
+    if (nextUnit && Math.abs(Number(formatted)) >= 1000) {
+      return `${(num / nextUnit.threshold).toFixed(1)}${nextUnit.suffix}`;
+    }
+    return `${formatted}${unit.suffix}`;
+  }
+
   return abs >= 1 ? num.toFixed(0) : num.toFixed(2);
 }
 
