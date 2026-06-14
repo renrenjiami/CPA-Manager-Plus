@@ -51,6 +51,16 @@ const stableJson = (value: unknown) => JSON.stringify(value ?? {});
 
 const parseJson = <T>(value: string): T => JSON.parse(value) as T;
 
+const isCanceledRequestError = (error: unknown) => {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { code?: string; name?: string; message?: string };
+  return (
+    candidate.code === 'ERR_CANCELED' ||
+    candidate.name === 'CanceledError' ||
+    candidate.message === 'canceled'
+  );
+};
+
 const buildInFlightRequestIdentityKey = (
   dataScopeKey: string | undefined,
   request: MonitoringAnalyticsRequest,
@@ -97,6 +107,7 @@ export function useMonitoringAnalytics({
   const lastRequestKeyRef = useRef('');
   const inFlightRequestIdentityKeyRef = useRef('');
   const inFlightRequestIdRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const filtersKey = useMemo(() => stableJson(filters), [filters]);
   const includeKey = useMemo(() => stableJson(include), [include]);
@@ -154,6 +165,8 @@ export function useMonitoringAnalytics({
     async (options: MonitoringAnalyticsRefreshOptions = {}) => {
       if (!enabled || !request || !serviceBase) {
         requestIdRef.current += 1;
+        abortControllerRef.current?.abort();
+        abortControllerRef.current = null;
         inFlightRequestIdentityKeyRef.current = '';
         inFlightRequestIdRef.current = 0;
         setData(null);
@@ -183,6 +196,9 @@ export function useMonitoringAnalytics({
       lastRequestKeyRef.current = requestKey;
       inFlightRequestIdentityKeyRef.current = inFlightRequestIdentityKey;
       inFlightRequestIdRef.current = requestId;
+      abortControllerRef.current?.abort();
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
       setLoading(true);
       setError('');
 
@@ -190,19 +206,24 @@ export function useMonitoringAnalytics({
         const response = await monitoringAnalyticsApi.getAnalytics(
           serviceBase,
           managementKey,
-          request
+          request,
+          { signal: abortController.signal }
         );
         if (requestIdRef.current !== requestId) return;
         setData(response);
         setDataScopeStateKey(activeDataScopeKey);
         setLastRefreshedAt(new Date());
       } catch (err) {
+        if (isCanceledRequestError(err)) return;
         if (requestIdRef.current !== requestId) return;
         setError(err instanceof Error ? err.message : String(err));
       } finally {
         if (inFlightRequestIdRef.current === requestId) {
           inFlightRequestIdentityKeyRef.current = '';
           inFlightRequestIdRef.current = 0;
+        }
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
         }
         if (requestIdRef.current === requestId) {
           setLoading(false);
@@ -227,6 +248,14 @@ export function useMonitoringAnalytics({
     }
     void refresh({ force: true });
   }, [availability.checking, refresh]);
+
+  useEffect(
+    () => () => {
+      abortControllerRef.current?.abort();
+      abortControllerRef.current = null;
+    },
+    []
+  );
 
   const dataStale = Boolean(dataScopeKey && data && dataScopeStateKey !== activeDataScopeKey);
   const scopedData = dataScopeKey || dataScopeStateKey === activeDataScopeKey ? data : null;

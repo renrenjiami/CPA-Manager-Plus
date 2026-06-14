@@ -371,7 +371,9 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 	summaryComputed := false
 
 	var modelStats []store.ModelStat
-	needsModelStats := req.Include.ModelShare || req.Include.ModelStats
+	// Summary total_cost is derived from per-model billing stats, even when the
+	// caller does not need the model share/stat sections in the response.
+	needsModelStats := req.Include.Summary || req.Include.ModelShare || req.Include.ModelStats
 	if needsModelStats {
 		modelStats, err = s.store.ModelStatsWithFilter(ctx, filter, 0)
 		if err != nil {

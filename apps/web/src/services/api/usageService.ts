@@ -804,6 +804,7 @@ export interface MonitoringAnalyticsResponse {
 }
 
 const USAGE_SERVICE_TIMEOUT_MS = 15 * 1000;
+const MONITORING_ANALYTICS_TIMEOUT_MS = 60 * 1000;
 const USAGE_SERVICE_TRANSFER_TIMEOUT_MS = 60 * 1000;
 const CODEX_INSPECTION_RUN_TIMEOUT_MS = 10 * 60 * 1000;
 export const USAGE_SERVICE_ID = 'cpa-manager-plus';
@@ -1346,15 +1347,17 @@ export const monitoringAnalyticsApi = {
   getAnalytics: async (
     base: string,
     managementKey: string | undefined,
-    request: MonitoringAnalyticsRequest
+    request: MonitoringAnalyticsRequest,
+    options: { signal?: AbortSignal } = {}
   ): Promise<MonitoringAnalyticsResponse> => {
     return withUsageServiceError(async () => {
       const response = await axios.post<MonitoringAnalyticsResponse>(
         buildUrl(base, '/v0/management/monitoring/analytics'),
         request,
         {
-          timeout: USAGE_SERVICE_TIMEOUT_MS,
+          timeout: MONITORING_ANALYTICS_TIMEOUT_MS,
           headers: authHeaders(managementKey),
+          signal: options.signal,
         }
       );
       return response.data;

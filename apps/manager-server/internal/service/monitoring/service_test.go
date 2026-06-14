@@ -239,6 +239,43 @@ func TestAnalyticsDoesNotExposeOrSearchRawFailBody(t *testing.T) {
 	}
 }
 
+func TestAnalyticsSummaryCostDoesNotRequireModelStatsInclude(t *testing.T) {
+	db := newMonitoringTestStore(t)
+	ctx := context.Background()
+	fromMS := int64(1_778_000_000_000)
+	toMS := fromMS + 60*60*1000
+
+	if err := db.SaveModelPrices(ctx, map[string]store.ModelPrice{
+		"gpt-summary-cost": {Prompt: 2, Completion: 4, Cache: 1},
+	}); err != nil {
+		t.Fatalf("save model prices: %v", err)
+	}
+	_, err := db.InsertEvents(ctx, []usage.Event{
+		monitoringEvent("summary-cost", fromMS+1_000, "gpt-summary-cost", "auth-1", "source-a", false, 1_000_000, 500_000, 0, 250_000, 1_500_000, nil),
+	})
+	if err != nil {
+		t.Fatalf("insert events: %v", err)
+	}
+
+	resp, err := New(db).Analytics(ctx, Request{
+		FromMS: fromMS,
+		ToMS:   toMS,
+		Include: Include{
+			Summary: true,
+		},
+	})
+	if err != nil {
+		t.Fatalf("analytics: %v", err)
+	}
+
+	if resp.Summary == nil || math.Abs(resp.Summary.TotalCost-3.75) > 0.000001 {
+		t.Fatalf("summary cost = %#v", resp.Summary)
+	}
+	if len(resp.ModelStats) != 0 || len(resp.ModelShare) != 0 {
+		t.Fatalf("unexpected model sections: stats=%#v share=%#v", resp.ModelStats, resp.ModelShare)
+	}
+}
+
 func TestAnalyticsUsesResolvedModelPricingInAggregates(t *testing.T) {
 	db := newMonitoringTestStore(t)
 	ctx := context.Background()
