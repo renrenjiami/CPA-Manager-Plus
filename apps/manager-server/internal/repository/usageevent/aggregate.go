@@ -73,13 +73,28 @@ where timestamp_ms >= ? and timestamp_ms < ?`
 
 // AggregateBetween computes summary metrics over [fromMs, toMs).
 func (r *repository) AggregateBetween(ctx context.Context, fromMs, toMs int64) (Aggregate, error) {
-	row := r.db.QueryRowContext(ctx, aggregateSQL, fromMs, toMs)
 	var agg Aggregate
-	var success, failure sql.NullInt64
-	if err := row.Scan(
-		&agg.TotalCalls,
-		&success,
-		&failure,
+	var failures sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, `select
+	count(*),
+	coalesce(sum(failed), 0)
+from usage_events
+where timestamp_ms >= ? and timestamp_ms < ?`, fromMs, toMs).Scan(&agg.TotalCalls, &failures); err != nil {
+		return Aggregate{}, err
+	}
+	agg.FailureCalls = failures.Int64
+	agg.SuccessCalls = agg.TotalCalls - agg.FailureCalls
+
+	if err := r.db.QueryRowContext(ctx, `select
+	coalesce(sum(input_tokens), 0),
+	coalesce(sum(output_tokens), 0),
+	coalesce(sum(reasoning_tokens), 0),
+	coalesce(sum(max(max(cached_tokens, cache_tokens) - max(cache_read_tokens, 0) - max(cache_creation_tokens, 0), 0)), 0),
+	coalesce(sum(cache_read_tokens), 0),
+	coalesce(sum(cache_creation_tokens), 0),
+	coalesce(sum(total_tokens), 0)
+from usage_events
+where timestamp_ms >= ? and timestamp_ms < ?`, fromMs, toMs).Scan(
 		&agg.InputTokens,
 		&agg.OutputTokens,
 		&agg.ReasoningTokens,
@@ -87,13 +102,20 @@ func (r *repository) AggregateBetween(ctx context.Context, fromMs, toMs int64) (
 		&agg.CacheReadTokens,
 		&agg.CacheCreationTokens,
 		&agg.TotalTokens,
+	); err != nil {
+		return Aggregate{}, err
+	}
+
+	if err := r.db.QueryRowContext(ctx, `select
+	avg(nullif(latency_ms, 0)),
+	count(*) filter (where total_tokens = 0 and failed = 0)
+from usage_events
+where timestamp_ms >= ? and timestamp_ms < ?`, fromMs, toMs).Scan(
 		&agg.AvgLatencyMS,
 		&agg.ZeroTokenCalls,
 	); err != nil {
 		return Aggregate{}, err
 	}
-	agg.SuccessCalls = success.Int64
-	agg.FailureCalls = failure.Int64
 	return agg, nil
 }
 

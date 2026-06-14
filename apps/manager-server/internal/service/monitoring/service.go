@@ -2,9 +2,11 @@ package monitoring
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/seakee/cpa-manager-plus/apps/manager-server/internal/service/pricing"
@@ -15,10 +17,14 @@ const (
 	defaultEventsLimit = 100
 	maxEventsLimit     = 50000
 	recentWindowMS     = 30 * 60 * 1000
+	analyticsCacheTTL  = 60 * time.Second
+	analyticsCacheMax  = 64
 )
 
 type Service struct {
-	store *store.Store
+	store   *store.Store
+	cacheMu sync.Mutex
+	cache   map[string]analyticsCacheEntry
 }
 
 func New(store *store.Store) *Service {
@@ -86,6 +92,11 @@ type Response struct {
 	TaskBuckets        []TaskBucketRow    `json:"task_buckets,omitempty"`
 	RecentFailures     []RecentFailure    `json:"recent_failures,omitempty"`
 	Events             *EventsResponse    `json:"events,omitempty"`
+}
+
+type analyticsCacheEntry struct {
+	response Response
+	created  time.Time
 }
 
 type Summary struct {
@@ -333,6 +344,10 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 	if req.FromMS <= 0 || req.ToMS <= 0 || req.FromMS >= req.ToMS {
 		return Response{}, errors.New("from_ms and to_ms are required and from_ms must be less than to_ms")
 	}
+	cacheKey := analyticsCacheKey(req)
+	if cached, ok := s.loadCachedAnalytics(cacheKey); ok {
+		return cached, nil
+	}
 	nowMS := req.NowMS
 	if nowMS <= 0 {
 		nowMS = time.Now().UnixMilli()
@@ -356,7 +371,7 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 	summaryComputed := false
 
 	var modelStats []store.ModelStat
-	needsModelStats := req.Include.Summary || req.Include.ModelShare || req.Include.ModelStats
+	needsModelStats := req.Include.ModelShare || req.Include.ModelStats
 	if needsModelStats {
 		modelStats, err = s.store.ModelStatsWithFilter(ctx, filter, 0)
 		if err != nil {
@@ -365,7 +380,7 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 	}
 
 	var taskBuckets []store.TaskBucket
-	if req.Include.Summary || req.Include.TaskBuckets {
+	if req.Include.TaskBuckets {
 		taskBuckets, err = s.store.TaskBucketsWithFilter(ctx, filter)
 		if err != nil {
 			return Response{}, err
@@ -496,7 +511,62 @@ func (s *Service) Analytics(ctx context.Context, req Request) (Response, error) 
 		response.Events = buildEvents(page, total)
 	}
 
+	s.storeCachedAnalytics(cacheKey, response)
 	return response, nil
+}
+
+func (s *Service) loadCachedAnalytics(key string) (Response, bool) {
+	if key == "" {
+		return Response{}, false
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	entry, ok := s.cache[key]
+	if !ok || time.Since(entry.created) > analyticsCacheTTL {
+		return Response{}, false
+	}
+	return entry.response, true
+}
+
+func (s *Service) storeCachedAnalytics(key string, response Response) {
+	if key == "" {
+		return
+	}
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
+	if s.cache == nil {
+		s.cache = make(map[string]analyticsCacheEntry)
+	}
+	if len(s.cache) >= analyticsCacheMax {
+		s.cache = make(map[string]analyticsCacheEntry)
+	}
+	s.cache[key] = analyticsCacheEntry{response: response, created: time.Now()}
+}
+
+func analyticsCacheKey(req Request) string {
+	const bucketMS = int64(time.Minute / time.Millisecond)
+	normalized := struct {
+		FromBucket       int64   `json:"from_bucket"`
+		ToBucket         int64   `json:"to_bucket"`
+		NowBucket        int64   `json:"now_bucket"`
+		SearchQuery      string  `json:"search_query,omitempty"`
+		SearchAPIKeyHash string  `json:"search_api_key_hash,omitempty"`
+		Filters          Filters `json:"filters"`
+		Include          Include `json:"include"`
+	}{
+		FromBucket:       req.FromMS / bucketMS,
+		ToBucket:         req.ToMS / bucketMS,
+		NowBucket:        req.NowMS / bucketMS,
+		SearchQuery:      strings.TrimSpace(req.SearchQuery),
+		SearchAPIKeyHash: strings.TrimSpace(req.SearchAPIKeyHash),
+		Filters:          req.Filters,
+		Include:          req.Include,
+	}
+	data, err := json.Marshal(normalized)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 func buildFilter(req Request) store.AnalyticsFilter {

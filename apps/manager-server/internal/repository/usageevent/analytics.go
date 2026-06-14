@@ -213,27 +213,27 @@ type EventsPage struct {
 
 func (r *repository) AggregateWithFilter(ctx context.Context, filter AnalyticsFilter) (Aggregate, error) {
 	where, args := analyticsWhere(filter)
-	row := r.db.QueryRowContext(ctx, `select
+
+	var agg Aggregate
+	var failures sql.NullInt64
+	if err := r.db.QueryRowContext(ctx, `select
 	count(*),
-	sum(case when failed = 0 then 1 else 0 end),
-	sum(case when failed = 1 then 1 else 0 end),
+	coalesce(sum(failed), 0)
+from usage_events `+where, args...).Scan(&agg.TotalCalls, &failures); err != nil {
+		return Aggregate{}, err
+	}
+	agg.FailureCalls = failures.Int64
+	agg.SuccessCalls = agg.TotalCalls - agg.FailureCalls
+
+	if err := r.db.QueryRowContext(ctx, `select
 	coalesce(sum(input_tokens), 0),
 	coalesce(sum(output_tokens), 0),
 	coalesce(sum(reasoning_tokens), 0),
 	coalesce(sum(`+compatCachedExpr+`), 0),
 	coalesce(sum(cache_read_tokens), 0),
 	coalesce(sum(cache_creation_tokens), 0),
-	coalesce(sum(total_tokens), 0),
-	avg(nullif(latency_ms, 0)),
-	coalesce(sum(case when total_tokens = 0 and failed = 0 then 1 else 0 end), 0)
-from usage_events `+where, args...)
-
-	var agg Aggregate
-	var success, failure sql.NullInt64
-	if err := row.Scan(
-		&agg.TotalCalls,
-		&success,
-		&failure,
+	coalesce(sum(total_tokens), 0)
+from usage_events `+where, args...).Scan(
 		&agg.InputTokens,
 		&agg.OutputTokens,
 		&agg.ReasoningTokens,
@@ -241,13 +241,19 @@ from usage_events `+where, args...)
 		&agg.CacheReadTokens,
 		&agg.CacheCreationTokens,
 		&agg.TotalTokens,
+	); err != nil {
+		return Aggregate{}, err
+	}
+
+	if err := r.db.QueryRowContext(ctx, `select
+	avg(nullif(latency_ms, 0)),
+	count(*) filter (where total_tokens = 0 and failed = 0)
+from usage_events `+where, args...).Scan(
 		&agg.AvgLatencyMS,
 		&agg.ZeroTokenCalls,
 	); err != nil {
 		return Aggregate{}, err
 	}
-	agg.SuccessCalls = success.Int64
-	agg.FailureCalls = failure.Int64
 	return agg, nil
 }
 
