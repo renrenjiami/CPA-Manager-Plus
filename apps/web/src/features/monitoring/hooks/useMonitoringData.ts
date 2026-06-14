@@ -323,6 +323,9 @@ export function useMonitoringData({
     },
     [config]
   );
+  const refreshAnalytics = useCallback(() => {
+    setAnalyticsNowMs(Date.now());
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -900,6 +903,7 @@ export function useMonitoringData({
     isTransitioningScope: analytics.dataStale,
     hasPresentationSnapshot: presentationResolution.hasPresentationSnapshot,
     refreshMeta,
+    refreshAnalytics,
     loadMoreEvents,
   };
 }

@@ -319,6 +319,7 @@ export function MonitoringCenterPage() {
     isTransitioningScope: monitoringScopeTransitioning,
     hasPresentationSnapshot: hasMonitoringPresentationSnapshot,
     refreshMeta,
+    refreshAnalytics,
     loadMoreEvents,
   } = useMonitoringData({
     config,
@@ -334,6 +335,10 @@ export function MonitoringCenterPage() {
   const refreshAll = useCallback(async () => {
     await Promise.all([loadApiKeyAliases(), refreshMeta(false)]);
   }, [loadApiKeyAliases, refreshMeta]);
+
+  const refreshLiveMonitoring = useCallback(() => {
+    refreshAnalytics();
+  }, [refreshAnalytics]);
 
   const setCurrentAccountPage = useCallback(
     (page: number) => {
@@ -352,7 +357,7 @@ export function MonitoringCenterPage() {
   useHeaderRefresh(refreshAll, isCurrentLayer);
   useInterval(
     () => {
-      void refreshAll().catch(() => {});
+      refreshLiveMonitoring();
     },
     isCurrentLayer && connectionStatus === 'connected' && Number(autoRefreshMs) > 0
       ? Number(autoRefreshMs)
@@ -372,8 +377,7 @@ export function MonitoringCenterPage() {
       : requestMonitoringAvailability.reason === 'service_unavailable'
         ? t('monitoring.request_monitoring_service_unavailable_body')
         : t('monitoring.request_monitoring_not_configured_body');
-  const monitoringBlockingLoading =
-    monitoringLoading && (!monitoringScopeTransitioning || !hasMonitoringPresentationSnapshot);
+  const monitoringBlockingLoading = monitoringLoading && !hasMonitoringPresentationSnapshot;
   const overallLoading =
     usageLoading || monitoringBlockingLoading || requestMonitoringAvailability.checking;
   const combinedError = monitoringUnavailable

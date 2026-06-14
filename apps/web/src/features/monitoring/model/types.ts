@@ -380,6 +380,7 @@ export interface UseMonitoringDataReturn {
   isTransitioningScope: boolean;
   hasPresentationSnapshot: boolean;
   refreshMeta: (showLoading?: boolean) => Promise<void>;
+  refreshAnalytics: () => void;
   loadMoreEvents: () => void;
 }
 
