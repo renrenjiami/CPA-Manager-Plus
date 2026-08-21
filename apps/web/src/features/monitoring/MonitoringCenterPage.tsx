@@ -101,6 +101,7 @@ import {
   type StatusFilter,
 } from '@/features/monitoring/model/monitoringCenterPageModel';
 import { resolveMonitoringDimensionCounts } from '@/features/monitoring/model/monitoringAnalyticsModel';
+import { resolveMonitoringAutoRefreshDelay } from '@/features/monitoring/model/monitoringAutoRefresh';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
 import { useHeaderSnapshotsLoader } from '@/features/monitoring/hooks/useHeaderSnapshotsLoader';
 import {
@@ -502,12 +503,14 @@ export function MonitoringCenterPage() {
     () => {
       void refreshAll().catch(() => {});
     },
-    isCurrentLayer &&
-      documentVisible &&
-      connectionStatus === 'connected' &&
-      Number(autoRefreshMs) > 0
-      ? Number(autoRefreshMs)
-      : null
+    resolveMonitoringAutoRefreshDelay({
+      isCurrentLayer,
+      documentVisible,
+      connectionStatus,
+      autoRefreshMs,
+      monitoringLoading,
+      monitoringScopeTransitioning,
+    })
   );
 
   useEffect(() => {

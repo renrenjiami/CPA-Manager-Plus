@@ -309,11 +309,11 @@ const usageAnalyticsKeys = [
   'usage_analytics.weekday_sat',
 ];
 
-const usageAnalyticsPageImport = `import { UsageAnalyticsPage } from '${[
+const usageAnalyticsPageImport = `() => import('${[
   '@',
   'pages',
   'UsageAnalyticsPage',
-].join('/')}';`;
+].join('/')}')`;
 
 describe('usage analytics app wiring', () => {
   it('registers /usage-analytics behind the request monitoring gate', () => {
