@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ReactElement } from 'react';
+import {
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactElement,
+} from 'react';
 import {
   Navigate,
   useLocation,
@@ -6,34 +15,83 @@ import {
   type Location,
   type RouteObject,
 } from 'react-router-dom';
-import { AccountsPage } from '@/pages/AccountsPage';
-import { DashboardPage } from '@/pages/DashboardPage';
-import { AiProvidersPage } from '@/pages/AiProvidersPage';
-import { AiProvidersClaudeEditLayout } from '@/pages/AiProvidersClaudeEditLayout';
-import { AiProvidersClaudeEditPage } from '@/pages/AiProvidersClaudeEditPage';
-import { AiProvidersClaudeModelsPage } from '@/pages/AiProvidersClaudeModelsPage';
-import { AiProvidersCodexEditPage } from '@/pages/AiProvidersCodexEditPage';
-import { AiProvidersGeminiEditPage } from '@/pages/AiProvidersGeminiEditPage';
-import { AiProvidersOpenAIEditLayout } from '@/pages/AiProvidersOpenAIEditLayout';
-import { AiProvidersOpenAIEditPage } from '@/pages/AiProvidersOpenAIEditPage';
-import { AiProvidersOpenAIModelsPage } from '@/pages/AiProvidersOpenAIModelsPage';
-import { AiProvidersVertexEditPage } from '@/pages/AiProvidersVertexEditPage';
-import { OAuthPage } from '@/pages/OAuthPage';
-import { UsageAnalyticsPage } from '@/pages/UsageAnalyticsPage';
-import { MonitoringCenterPage } from '@/pages/MonitoringCenterPage';
-import { AccountActionCandidatesPage } from '@/pages/AccountActionCandidatesPage';
-import { ModelPricesPage } from '@/pages/ModelPricesPage';
-import { ConfigPage } from '@/pages/ConfigPage';
-import { LogsPage } from '@/pages/LogsPage';
-import { PluginResourcePage } from '@/pages/PluginResourcePage';
-import { PluginsPage } from '@/pages/PluginsPage';
-import { SystemPage } from '@/pages/SystemPage';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { usePanelFeatureAvailability } from '@/hooks/usePanelFeatureAvailability';
 import { ensureRouteBasePathname, isDemoMode } from '@/features/demo/demoMode';
 import { useAuthStore, useConfigStore } from '@/stores';
 
 type FeatureKey = 'requestMonitoring' | 'modelPrices';
+
+function lazyNamed<TModule, TKey extends keyof TModule>(
+  loader: () => Promise<TModule>,
+  key: TKey
+) {
+  return lazy(async () => ({
+    default: (await loader())[key] as ComponentType<unknown>,
+  }));
+}
+
+const AccountsPage = lazyNamed(() => import('@/pages/AccountsPage'), 'AccountsPage');
+const DashboardPage = lazyNamed(() => import('@/pages/DashboardPage'), 'DashboardPage');
+const AiProvidersPage = lazyNamed(() => import('@/pages/AiProvidersPage'), 'AiProvidersPage');
+const AiProvidersClaudeEditLayout = lazyNamed(
+  () => import('@/pages/AiProvidersClaudeEditLayout'),
+  'AiProvidersClaudeEditLayout'
+);
+const AiProvidersClaudeEditPage = lazyNamed(
+  () => import('@/pages/AiProvidersClaudeEditPage'),
+  'AiProvidersClaudeEditPage'
+);
+const AiProvidersClaudeModelsPage = lazyNamed(
+  () => import('@/pages/AiProvidersClaudeModelsPage'),
+  'AiProvidersClaudeModelsPage'
+);
+const AiProvidersCodexEditPage = lazyNamed(
+  () => import('@/pages/AiProvidersCodexEditPage'),
+  'AiProvidersCodexEditPage'
+);
+const AiProvidersGeminiEditPage = lazyNamed(
+  () => import('@/pages/AiProvidersGeminiEditPage'),
+  'AiProvidersGeminiEditPage'
+);
+const AiProvidersOpenAIEditLayout = lazyNamed(
+  () => import('@/pages/AiProvidersOpenAIEditLayout'),
+  'AiProvidersOpenAIEditLayout'
+);
+const AiProvidersOpenAIEditPage = lazyNamed(
+  () => import('@/pages/AiProvidersOpenAIEditPage'),
+  'AiProvidersOpenAIEditPage'
+);
+const AiProvidersOpenAIModelsPage = lazyNamed(
+  () => import('@/pages/AiProvidersOpenAIModelsPage'),
+  'AiProvidersOpenAIModelsPage'
+);
+const AiProvidersVertexEditPage = lazyNamed(
+  () => import('@/pages/AiProvidersVertexEditPage'),
+  'AiProvidersVertexEditPage'
+);
+const OAuthPage = lazyNamed(() => import('@/pages/OAuthPage'), 'OAuthPage');
+const UsageAnalyticsPage = lazyNamed(
+  () => import('@/pages/UsageAnalyticsPage'),
+  'UsageAnalyticsPage'
+);
+const MonitoringCenterPage = lazyNamed(
+  () => import('@/pages/MonitoringCenterPage'),
+  'MonitoringCenterPage'
+);
+const AccountActionCandidatesPage = lazyNamed(
+  () => import('@/pages/AccountActionCandidatesPage'),
+  'AccountActionCandidatesPage'
+);
+const ModelPricesPage = lazyNamed(() => import('@/pages/ModelPricesPage'), 'ModelPricesPage');
+const ConfigPage = lazyNamed(() => import('@/pages/ConfigPage'), 'ConfigPage');
+const LogsPage = lazyNamed(() => import('@/pages/LogsPage'), 'LogsPage');
+const PluginResourcePage = lazyNamed(
+  () => import('@/pages/PluginResourcePage'),
+  'PluginResourcePage'
+);
+const PluginsPage = lazyNamed(() => import('@/pages/PluginsPage'), 'PluginsPage');
+const SystemPage = lazyNamed(() => import('@/pages/SystemPage'), 'SystemPage');
 
 function LegacyAccountsRedirect({ healthMode }: { healthMode: 'local' | 'server' }) {
   const location = useLocation();
@@ -263,6 +321,6 @@ export function MainRoutes({ location, routeBase }: { location?: Location; route
     () => ensureRouteLocationBase(location, routeBase),
     [location, routeBase]
   );
-
-  return useRoutes(mainRoutes, routeLocation);
+  const element = useRoutes(mainRoutes, routeLocation);
+  return <Suspense fallback={<LoadingSpinner />}>{element}</Suspense>;
 }

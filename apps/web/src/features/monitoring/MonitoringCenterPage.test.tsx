@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { TFunction } from 'i18next';
 import { AccountExpandedDetails, AccountOverviewCard } from './MonitoringCenterPage';
+import { resolveMonitoringAutoRefreshDelay } from './model/monitoringAutoRefresh';
 import monitoringCenterPageSource from './MonitoringCenterPage.tsx?raw';
 import accountOverviewPanelSource from './components/AccountOverviewPanel.tsx?raw';
 import { MonitoringSummarySection } from '@/features/monitoring/components/MonitoringSummarySection';
@@ -91,6 +92,42 @@ const t = ((key: string, options?: Record<string, unknown>) => {
 
 const createAuthState = (overrides: MonitoringAccountAuthState): MonitoringAccountAuthState =>
   overrides;
+
+describe('MonitoringCenterPage auto refresh', () => {
+  const base = {
+    isCurrentLayer: true,
+    documentVisible: true,
+    connectionStatus: 'connected',
+    autoRefreshMs: '5000',
+    monitoringLoading: false,
+    monitoringScopeTransitioning: false,
+  };
+
+  it('waits for the current analytics response before scheduling another refresh', () => {
+    expect(resolveMonitoringAutoRefreshDelay(base)).toBe(5000);
+    expect(
+      resolveMonitoringAutoRefreshDelay({
+        ...base,
+        monitoringLoading: true,
+      })
+    ).toBeNull();
+    expect(
+      resolveMonitoringAutoRefreshDelay({
+        ...base,
+        monitoringScopeTransitioning: true,
+      })
+    ).toBeNull();
+  });
+
+  it('does not schedule refreshes while disconnected, hidden, inactive, or disabled', () => {
+    expect(
+      resolveMonitoringAutoRefreshDelay({ ...base, connectionStatus: 'disconnected' })
+    ).toBeNull();
+    expect(resolveMonitoringAutoRefreshDelay({ ...base, documentVisible: false })).toBeNull();
+    expect(resolveMonitoringAutoRefreshDelay({ ...base, isCurrentLayer: false })).toBeNull();
+    expect(resolveMonitoringAutoRefreshDelay({ ...base, autoRefreshMs: '0' })).toBeNull();
+  });
+});
 
 describe('MonitoringCenterPage dimension counts', () => {
   it('uses scoped rows for the active aggregate tab and selector counts elsewhere', () => {

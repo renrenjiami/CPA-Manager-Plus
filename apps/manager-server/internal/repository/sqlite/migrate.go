@@ -934,6 +934,9 @@ func Migrate(db *sql.DB) error {
 	if err := ensureUsageEventSnapshotColumns(db); err != nil {
 		return err
 	}
+	if err := ensureUsageEventMonitoringIndexes(db); err != nil {
+		return err
+	}
 	if err := ensureCodexInspectionRunColumns(db); err != nil {
 		return err
 	}
@@ -2860,6 +2863,40 @@ func ensureUsageEventSnapshotColumns(db *sql.DB) error {
 		return err
 	}
 	return nil
+}
+
+func ensureUsageEventMonitoringIndexes(db *sql.DB) error {
+	_, err := db.Exec(`create index if not exists idx_usage_events_monitoring_cover_v1 on usage_events(
+		timestamp_ms,
+		model,
+		resolved_model,
+		service_tier,
+		failed,
+		input_tokens,
+		output_tokens,
+		reasoning_tokens,
+		cached_tokens,
+		cache_tokens,
+		cache_read_tokens,
+		cache_creation_tokens,
+		total_tokens,
+		latency_ms,
+		ttft_ms,
+		source_hash,
+		auth_index,
+		timestamp,
+		source,
+		endpoint,
+		account_snapshot,
+		auth_label_snapshot,
+		auth_provider_snapshot,
+		provider,
+		api_key_hash,
+		auth_file_snapshot,
+		auth_project_id_snapshot,
+		executor_type
+	)`)
+	return err
 }
 
 func ensureModelPriceColumns(db *sql.DB) error {
