@@ -309,15 +309,12 @@ const usageAnalyticsKeys = [
   'usage_analytics.weekday_sat',
 ];
 
-const usageAnalyticsPageImport = `import { UsageAnalyticsPage } from '${[
-  '@',
-  'pages',
-  'UsageAnalyticsPage',
-].join('/')}';`;
+const usageAnalyticsPageImport = "() => import('@/pages/UsageAnalyticsPage')";
 
 describe('usage analytics app wiring', () => {
   it('registers /usage-analytics behind the request monitoring gate', () => {
     expect(routesSource).toContain(usageAnalyticsPageImport);
+    expect(routesSource).toContain("'UsageAnalyticsPage'");
     const usageRouteIndex = routesSource.indexOf("path: '/usage-analytics'");
     const usageRouteSource = routesSource.slice(
       usageRouteIndex,
