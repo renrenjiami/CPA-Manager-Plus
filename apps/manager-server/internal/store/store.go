@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -124,8 +125,9 @@ type UsagePricingAccountSnapshot struct {
 }
 
 type Store struct {
-	db            *sql.DB
-	modelPricesMu sync.RWMutex
+	db                *sql.DB
+	modelPricesMu     sync.RWMutex
+	rollupCatchUpGate chan struct{}
 
 	Settings         setting.Repository
 	UsageEvents      usageevent.Repository
@@ -153,21 +155,22 @@ func Open(path string, protector ...*security.Protector) (*Store, error) {
 
 func New(db *sql.DB, protector ...*security.Protector) *Store {
 	return &Store{
-		db:               db,
-		Settings:         setting.New(db, protector...),
-		UsageEvents:      usageevent.New(db),
-		DeadLetters:      deadletter.New(db),
-		ModelPrices:      modelprice.New(db),
-		APIKeyAliases:    apikeyalias.New(db),
-		AccountActions:   accountaction.New(db),
-		CodexInspections: codexinspection.New(db),
-		DataMigrations:   datamigration.New(db),
-		QuotaCooldowns:   quotacooldown.New(db),
-		QuotaSnapshots:   quotasnapshot.New(db),
-		UsageAggregates:  usageaggregate.New(db),
-		UsagePricing:     usagepricing.New(db),
-		UsageMonitoring:  usagemonitoring.New(db),
-		UsageRollups:     usagerollup.New(db),
+		db:                db,
+		rollupCatchUpGate: make(chan struct{}, 1),
+		Settings:          setting.New(db, protector...),
+		UsageEvents:       usageevent.New(db),
+		DeadLetters:       deadletter.New(db),
+		ModelPrices:       modelprice.New(db),
+		APIKeyAliases:     apikeyalias.New(db),
+		AccountActions:    accountaction.New(db),
+		CodexInspections:  codexinspection.New(db),
+		DataMigrations:    datamigration.New(db),
+		QuotaCooldowns:    quotacooldown.New(db),
+		QuotaSnapshots:    quotasnapshot.New(db),
+		UsageAggregates:   usageaggregate.New(db),
+		UsagePricing:      usagepricing.New(db),
+		UsageMonitoring:   usagemonitoring.New(db),
+		UsageRollups:      usagerollup.New(db),
 	}
 }
 
@@ -483,7 +486,9 @@ func (s *Store) CatchUpUsageHourlyAggregate(ctx context.Context, limit int, nowM
 	if !ready {
 		return UsageHourlyAggregateCatchUpResult{Pending: true}, nil
 	}
-	return s.UsageAggregates.CatchUp(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageHourlyAggregateCatchUpResult, error) {
+		return s.UsageAggregates.CatchUp(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) RecordUsageHourlyAggregateFailure(ctx context.Context, aggregateErr error, nowMS int64) error {
@@ -506,7 +511,9 @@ func (s *Store) CatchUpUsagePricing(ctx context.Context, limit int, nowMS int64)
 	if !ready {
 		return UsagePricingCatchUpResult{Pending: true}, nil
 	}
-	return s.UsagePricing.CatchUp(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsagePricingCatchUpResult, error) {
+		return s.UsagePricing.CatchUp(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) RecordUsagePricingFailure(ctx context.Context, rollupErr error, nowMS int64) error {
@@ -521,7 +528,9 @@ func (s *Store) CatchUpUsageMonitoringStats(ctx context.Context, limit int, nowM
 	if !ready {
 		return UsageMonitoringCatchUpResult{Pending: true}, nil
 	}
-	return s.UsageMonitoring.CatchUpStats(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageMonitoringCatchUpResult, error) {
+		return s.UsageMonitoring.CatchUpStats(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) CatchUpUsageMonitoringProjection(ctx context.Context, limit int, nowMS int64) (UsageMonitoringCatchUpResult, error) {
@@ -532,11 +541,15 @@ func (s *Store) CatchUpUsageMonitoringProjection(ctx context.Context, limit int,
 	if !ready {
 		return UsageMonitoringCatchUpResult{Pending: true}, nil
 	}
-	return s.UsageMonitoring.CatchUpProjection(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageMonitoringCatchUpResult, error) {
+		return s.UsageMonitoring.CatchUpProjection(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) CatchUpUsageMonitoringMetadata(ctx context.Context, limit int, nowMS int64) (UsageMonitoringCatchUpResult, error) {
-	return s.UsageMonitoring.CatchUpMetadata(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageMonitoringCatchUpResult, error) {
+		return s.UsageMonitoring.CatchUpMetadata(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) RecordUsageMonitoringFailure(ctx context.Context, rollupName string, rollupErr error, nowMS int64) error {
@@ -669,7 +682,9 @@ func (s *Store) CatchUpAccountHistoryRollups(ctx context.Context, limit int, now
 	if !ready {
 		return UsageRollupCatchUpResult{Pending: true}, nil
 	}
-	return s.UsageRollups.CatchUpAccountHistory(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageRollupCatchUpResult, error) {
+		return s.UsageRollups.CatchUpAccountHistory(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) CatchUpDashboardHourlyRollups(ctx context.Context, limit int, nowMS int64) (UsageRollupCatchUpResult, error) {
@@ -680,7 +695,44 @@ func (s *Store) CatchUpDashboardHourlyRollups(ctx context.Context, limit int, no
 	if !ready {
 		return UsageRollupCatchUpResult{Pending: true}, nil
 	}
-	return s.UsageRollups.CatchUpDashboardHourly(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageRollupCatchUpResult, error) {
+		return s.UsageRollups.CatchUpDashboardHourly(ctx, limit, nowMS)
+	})
+}
+
+const rollupCatchUpRetryLimit = 3
+
+func runRollupCatchUp[T any](ctx context.Context, gate chan struct{}, catchUp func() (T, error)) (T, error) {
+	var zero T
+	select {
+	case gate <- struct{}{}:
+		defer func() { <-gate }()
+	case <-ctx.Done():
+		return zero, ctx.Err()
+	}
+
+	for attempt := 0; ; attempt++ {
+		result, err := catchUp()
+		if err == nil || !isSQLiteBusyError(err) || attempt+1 >= rollupCatchUpRetryLimit {
+			return result, err
+		}
+		delay := time.Duration(1<<attempt) * 50 * time.Millisecond
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			timer.Stop()
+			return zero, ctx.Err()
+		}
+	}
+}
+
+func isSQLiteBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "database is locked") || strings.Contains(message, "sqlite_busy")
 }
 
 func (s *Store) AccountHistoryRollupCheckpoint(ctx context.Context) (UsageRollupCheckpoint, error) {
