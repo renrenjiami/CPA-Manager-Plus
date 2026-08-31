@@ -42,13 +42,19 @@ const isDemoSiteBuild = (mode: string) =>
 export default defineConfig(({ mode }) => {
   const demoSite = isDemoSiteBuild(mode);
   const useRealDemoFixtures = demoSite || mode === 'test';
+  const splitAssets = !demoSite && process.env.CPAMP_WEB_SPLIT_ASSETS === '1';
 
   return {
+    base: splitAssets ? './' : undefined,
     plugins: [
       react(),
-      viteSingleFile({
-        removeViteModuleLoader: true
-      })
+      ...(splitAssets
+        ? []
+        : [
+            viteSingleFile({
+              removeViteModuleLoader: true
+            })
+          ])
     ],
     define: {
       __APP_VERSION__: JSON.stringify(getVersion()),
@@ -85,14 +91,48 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'es2020',
       outDir: demoSite ? 'dist-demo' : 'dist',
-      assetsInlineLimit: 100000000,
+      assetsInlineLimit: splitAssets ? 4096 : 100000000,
       chunkSizeWarningLimit: 100000000,
-      cssCodeSplit: false,
-      rolldownOptions: {
-        output: {
-          codeSplitting: false
-        }
-      }
+      cssCodeSplit: splitAssets,
+      rolldownOptions: splitAssets
+        ? {
+            output: {
+              manualChunks(id) {
+                if (!id.includes('/node_modules/')) return undefined;
+                if (
+                  id.includes('/node_modules/react/') ||
+                  id.includes('/node_modules/react-dom/') ||
+                  id.includes('/node_modules/scheduler/')
+                ) {
+                  return 'vendor-react';
+                }
+                if (
+                  id.includes('/node_modules/react-router') ||
+                  id.includes('/node_modules/@remix-run/')
+                ) {
+                  return 'vendor-router';
+                }
+                if (
+                  id.includes('/node_modules/i18next/') ||
+                  id.includes('/node_modules/react-i18next/')
+                ) {
+                  return 'vendor-i18n';
+                }
+                if (id.includes('/node_modules/axios/')) {
+                  return 'vendor-axios';
+                }
+                if (id.includes('/node_modules/zustand/')) {
+                  return 'vendor-zustand';
+                }
+                return undefined;
+              }
+            }
+          }
+        : {
+            output: {
+              codeSplitting: false
+            }
+          }
     }
   };
 });

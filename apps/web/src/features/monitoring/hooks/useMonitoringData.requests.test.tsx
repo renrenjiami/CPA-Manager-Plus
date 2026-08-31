@@ -318,7 +318,7 @@ describe('useMonitoringData analytics requests', () => {
       summary: true,
       summary_profile: 'compact',
       account_stats: true,
-      events_page: { limit: 500, before_ms: null, before_id: null },
+      events_page: { limit: 100, before_ms: null, before_id: null },
       granularity: 'hour',
     });
     expect(JSON.parse(accounts?.dataScopeKey ?? '{}')).toMatchObject({
@@ -335,7 +335,7 @@ describe('useMonitoringData analytics requests', () => {
       summary: true,
       summary_profile: 'compact',
       api_key_stats: true,
-      events_page: { limit: 500, before_ms: null, before_id: null },
+      events_page: { limit: 100, before_ms: null, before_id: null },
       granularity: 'hour',
     });
     expect(JSON.parse(apiKeys?.dataScopeKey ?? '{}')).toMatchObject({
@@ -360,7 +360,7 @@ describe('useMonitoringData analytics requests', () => {
     await renderTab('realtime');
 
     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
-      limit: 500,
+      limit: 100,
       before_ms: null,
       before_id: null,
     });
@@ -373,21 +373,21 @@ describe('useMonitoringData analytics requests', () => {
     });
 
     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
-      limit: 500,
+      limit: 100,
       before_ms: 1_799_999_999_000,
       before_id: 7,
     });
 
     await renderTab('accounts');
     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
-      limit: 500,
+      limit: 100,
       before_ms: null,
       before_id: null,
     });
 
     await renderTab('realtime');
     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
-      limit: 500,
+      limit: 100,
       before_ms: null,
       before_id: null,
     });

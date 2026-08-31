@@ -35,7 +35,10 @@ func TestTopModelsQueryUsesTimestampIndexBeforePricingMaterialization(t *testing
 			t.Fatalf("scan query plan: %v", err)
 		}
 		details = append(details, detail)
-		usesTimestampIndex = usesTimestampIndex || strings.Contains(detail, "SEARCH usage_events USING INDEX idx_usage_events_timestamp")
+		usesTimestampIndex = usesTimestampIndex ||
+			(strings.Contains(detail, "SEARCH usage_events USING") &&
+				(strings.Contains(detail, "idx_usage_events_timestamp") ||
+					strings.Contains(detail, "idx_usage_events_monitoring_cover_v1")))
 		fullUsageScan = fullUsageScan || strings.Contains(detail, "SCAN usage_events")
 	}
 	if err := rows.Err(); err != nil {
