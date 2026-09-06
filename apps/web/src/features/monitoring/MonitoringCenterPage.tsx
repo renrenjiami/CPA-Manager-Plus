@@ -462,7 +462,12 @@ export function MonitoringCenterPage() {
     exportUsage,
     importUsage,
     cancelUsageImport,
-  } = useUsageData({ loadUsageEvents: false });
+  } = useUsageData({
+    loadUsageEvents: false,
+    // Account/API-key costs already arrive with server analytics. Only the
+    // realtime event view needs the full book for client-side event pricing.
+    loadModelPriceBook: activeDataTab === 'realtime',
+  });
 
   const monitoringScopeFilters = useMemo(
     () => ({
@@ -775,7 +780,9 @@ export function MonitoringCenterPage() {
   const combinedError = monitoringUnavailable
     ? monitoringError
     : [usageError, monitoringError].filter(Boolean).join('；');
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const hasPrices =
+    Object.keys(modelPrices).length > 0 ||
+    (Number.isFinite(monitoringSummary.totalCost) && monitoringSummary.totalCost > 0);
 
   useEffect(() => {
     accountQuotaStatesByRowIdRef.current = accountQuotaStatesByRowId;
