@@ -57,10 +57,12 @@ export interface UsageImportOptions {
 
 export interface UseUsageDataOptions {
   loadUsageEvents?: boolean;
+  loadModelPriceBook?: boolean;
 }
 
 export function useUsageData({
   loadUsageEvents = true,
+  loadModelPriceBook = true,
 }: UseUsageDataOptions = {}): UseUsageDataReturn {
   const managementKey = useAuthStore((state) => state.managementKey);
   const featureAvailability = usePanelFeatureAvailability();
@@ -170,6 +172,7 @@ export function useUsageData({
   );
 
   const loadModelPricesFromStorage = useCallback(async () => {
+    if (!loadModelPriceBook) return;
     const fallbackPrices = loadModelPrices();
     try {
       const response = await getModelPricesFromApi();
@@ -189,7 +192,7 @@ export function useUsageData({
     } catch {
       setModelPricesState(fallbackPrices);
     }
-  }, [getModelPricesFromApi, saveModelPricesToApi]);
+  }, [getModelPricesFromApi, loadModelPriceBook, saveModelPricesToApi]);
 
   const loadApiKeyAliases = useCallback(async () => {
     const requestId = aliasRequestIdRef.current + 1;
