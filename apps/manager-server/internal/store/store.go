@@ -557,7 +557,9 @@ func (s *Store) CatchUpUsageMonitoringMetadata(ctx context.Context, limit int, n
 }
 
 func (s *Store) CatchUpCodexLegacyIdentityEvidence(ctx context.Context, limit int, nowMS int64) (UsageMonitoringCatchUpResult, error) {
-	return s.UsageMonitoring.CatchUpCodexLegacyIdentityEvidence(ctx, limit, nowMS)
+	return runRollupCatchUp(ctx, s.rollupCatchUpGate, func() (UsageMonitoringCatchUpResult, error) {
+		return s.UsageMonitoring.CatchUpCodexLegacyIdentityEvidence(ctx, limit, nowMS)
+	})
 }
 
 func (s *Store) RecordUsageMonitoringFailure(ctx context.Context, rollupName string, rollupErr error, nowMS int64) error {
