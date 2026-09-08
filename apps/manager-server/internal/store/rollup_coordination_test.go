@@ -75,3 +75,16 @@ func TestRunRollupCatchUpDoesNotRetryOtherErrors(t *testing.T) {
 		t.Fatalf("error/attempts = %v/%d, want %v/1", err, attempts.Load(), wantErr)
 	}
 }
+
+func TestCodexEvidenceCatchUpHonorsSharedGateCancellation(t *testing.T) {
+	gate := make(chan struct{}, 1)
+	gate <- struct{}{}
+	s := &Store{rollupCatchUpGate: gate}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	// With the shared writer busy, do not enter the repository at all.
+	_, err := s.CatchUpCodexLegacyIdentityEvidence(ctx, 100, 1)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("error = %v, want canceled while waiting for shared gate", err)
+	}
+}
