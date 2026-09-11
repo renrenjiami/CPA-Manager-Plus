@@ -309,7 +309,7 @@ const usageAnalyticsKeys = [
   'usage_analytics.weekday_sat',
 ];
 
-const usageAnalyticsPageImport = "() => import('@/pages/UsageAnalyticsPage')";
+const usageAnalyticsPageImport = "() => import('@/" + "pages/UsageAnalyticsPage')";
 
 describe('usage analytics app wiring', () => {
   it('registers /usage-analytics behind the request monitoring gate', () => {
