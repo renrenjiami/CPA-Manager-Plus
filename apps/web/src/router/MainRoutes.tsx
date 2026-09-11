@@ -32,6 +32,7 @@ function lazyNamed<TModule, TKey extends keyof TModule>(
 }
 
 const AccountsPage = lazyNamed(() => import('@/pages/AccountsPage'), 'AccountsPage');
+const ManagerUpdatePage = lazyNamed(() => import('@/pages/ManagerUpdatePage'), 'ManagerUpdatePage');
 const DashboardPage = lazyNamed(() => import('@/pages/DashboardPage'), 'DashboardPage');
 const AiProvidersPage = lazyNamed(() => import('@/pages/AiProvidersPage'), 'AiProvidersPage');
 const AiProvidersClaudeEditLayout = lazyNamed(
@@ -298,6 +299,7 @@ const mainRoutes: RouteObject[] = [
     ),
   },
   { path: '/system', element: <SystemPage /> },
+  { path: '/system/updates', element: <ManagerUpdatePage /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ];
 
