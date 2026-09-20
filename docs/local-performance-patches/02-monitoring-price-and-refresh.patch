@@ -1,0 +1,334 @@
+diff --git a/apps/web/src/features/monitoring/MonitoringCenterPage.test.tsx b/apps/web/src/features/monitoring/MonitoringCenterPage.test.tsx
+index 9b55b5f2..9cc8d5b2 100644
+--- a/apps/web/src/features/monitoring/MonitoringCenterPage.test.tsx
++++ b/apps/web/src/features/monitoring/MonitoringCenterPage.test.tsx
+@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
+ import { describe, expect, it } from 'vitest';
+ import type { TFunction } from 'i18next';
+ import { AccountExpandedDetails, AccountOverviewCard } from './MonitoringCenterPage';
++import { resolveMonitoringAutoRefreshDelay } from './model/monitoringAutoRefresh';
+ import monitoringCenterPageSource from './MonitoringCenterPage.tsx?raw';
+ import accountOverviewPanelSource from './components/AccountOverviewPanel.tsx?raw';
+ import { MonitoringSummarySection } from '@/features/monitoring/components/MonitoringSummarySection';
+@@ -92,6 +93,42 @@ const t = ((key: string, options?: Record<string, unknown>) => {
+ const createAuthState = (overrides: MonitoringAccountAuthState): MonitoringAccountAuthState =>
+   overrides;
+ 
++describe('MonitoringCenterPage auto refresh', () => {
++  const base = {
++    isCurrentLayer: true,
++    documentVisible: true,
++    connectionStatus: 'connected',
++    autoRefreshMs: '5000',
++    monitoringLoading: false,
++    monitoringScopeTransitioning: false,
++  };
++
++  it('waits for the current analytics response before scheduling another refresh', () => {
++    expect(resolveMonitoringAutoRefreshDelay(base)).toBe(5000);
++    expect(
++      resolveMonitoringAutoRefreshDelay({
++        ...base,
++        monitoringLoading: true,
++      })
++    ).toBeNull();
++    expect(
++      resolveMonitoringAutoRefreshDelay({
++        ...base,
++        monitoringScopeTransitioning: true,
++      })
++    ).toBeNull();
++  });
++
++  it('does not schedule refreshes while disconnected, hidden, inactive, or disabled', () => {
++    expect(
++      resolveMonitoringAutoRefreshDelay({ ...base, connectionStatus: 'disconnected' })
++    ).toBeNull();
++    expect(resolveMonitoringAutoRefreshDelay({ ...base, documentVisible: false })).toBeNull();
++    expect(resolveMonitoringAutoRefreshDelay({ ...base, isCurrentLayer: false })).toBeNull();
++    expect(resolveMonitoringAutoRefreshDelay({ ...base, autoRefreshMs: '0' })).toBeNull();
++  });
++});
++
+ describe('MonitoringCenterPage dimension counts', () => {
+   it('uses scoped rows for the active aggregate tab and selector counts elsewhere', () => {
+     expect(
+diff --git a/apps/web/src/features/monitoring/MonitoringCenterPage.tsx b/apps/web/src/features/monitoring/MonitoringCenterPage.tsx
+index fec44647..c72c11b8 100644
+--- a/apps/web/src/features/monitoring/MonitoringCenterPage.tsx
++++ b/apps/web/src/features/monitoring/MonitoringCenterPage.tsx
+@@ -123,6 +123,7 @@ import {
+   type StatusFilter,
+ } from '@/features/monitoring/model/monitoringCenterPageModel';
+ import { resolveMonitoringDimensionCounts } from '@/features/monitoring/model/monitoringAnalyticsModel';
++import { resolveMonitoringAutoRefreshDelay } from '@/features/monitoring/model/monitoringAutoRefresh';
+ import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
+ import { useHeaderSnapshotsLoader } from '@/features/monitoring/hooks/useHeaderSnapshotsLoader';
+ import {
+@@ -461,7 +462,12 @@ export function MonitoringCenterPage() {
+     exportUsage,
+     importUsage,
+     cancelUsageImport,
+-  } = useUsageData({ loadUsageEvents: false });
++  } = useUsageData({
++    loadUsageEvents: false,
++    // Account/API-key costs already arrive with server analytics. Only the
++    // realtime event view needs the full book for client-side event pricing.
++    loadModelPriceBook: activeDataTab === 'realtime',
++  });
+ 
+   const monitoringScopeFilters = useMemo(
+     () => ({
+@@ -739,12 +745,14 @@ export function MonitoringCenterPage() {
+     () => {
+       void refreshAll().catch(() => {});
+     },
+-    isCurrentLayer &&
+-      documentVisible &&
+-      connectionStatus === 'connected' &&
+-      Number(autoRefreshMs) > 0
+-      ? Number(autoRefreshMs)
+-      : null
++    resolveMonitoringAutoRefreshDelay({
++      isCurrentLayer,
++      documentVisible,
++      connectionStatus,
++      autoRefreshMs,
++      monitoringLoading,
++      monitoringScopeTransitioning,
++    })
+   );
+ 
+   useEffect(() => {
+@@ -772,7 +780,9 @@ export function MonitoringCenterPage() {
+   const combinedError = monitoringUnavailable
+     ? monitoringError
+     : [usageError, monitoringError].filter(Boolean).join('；');
+-  const hasPrices = Object.keys(modelPrices).length > 0;
++  const hasPrices =
++    Object.keys(modelPrices).length > 0 ||
++    (Number.isFinite(monitoringSummary.totalCost) && monitoringSummary.totalCost > 0);
+ 
+   useEffect(() => {
+     accountQuotaStatesByRowIdRef.current = accountQuotaStatesByRowId;
+diff --git a/apps/web/src/features/monitoring/hooks/useMonitoringData.requests.test.tsx b/apps/web/src/features/monitoring/hooks/useMonitoringData.requests.test.tsx
+index 959d8df5..c6f67b17 100644
+--- a/apps/web/src/features/monitoring/hooks/useMonitoringData.requests.test.tsx
++++ b/apps/web/src/features/monitoring/hooks/useMonitoringData.requests.test.tsx
+@@ -318,7 +318,7 @@ describe('useMonitoringData analytics requests', () => {
+       summary: true,
+       summary_profile: 'compact',
+       account_stats: true,
+-      events_page: { limit: 500, before_ms: null, before_id: null },
++      events_page: { limit: 100, before_ms: null, before_id: null },
+       granularity: 'hour',
+     });
+     expect(JSON.parse(accounts?.dataScopeKey ?? '{}')).toMatchObject({
+@@ -335,7 +335,7 @@ describe('useMonitoringData analytics requests', () => {
+       summary: true,
+       summary_profile: 'compact',
+       api_key_stats: true,
+-      events_page: { limit: 500, before_ms: null, before_id: null },
++      events_page: { limit: 100, before_ms: null, before_id: null },
+       granularity: 'hour',
+     });
+     expect(JSON.parse(apiKeys?.dataScopeKey ?? '{}')).toMatchObject({
+@@ -360,7 +360,7 @@ describe('useMonitoringData analytics requests', () => {
+     await renderTab('realtime');
+ 
+     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
+-      limit: 500,
++      limit: 100,
+       before_ms: null,
+       before_id: null,
+     });
+@@ -373,21 +373,21 @@ describe('useMonitoringData analytics requests', () => {
+     });
+ 
+     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
+-      limit: 500,
++      limit: 100,
+       before_ms: 1_799_999_999_000,
+       before_id: 7,
+     });
+ 
+     await renderTab('accounts');
+     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
+-      limit: 500,
++      limit: 100,
+       before_ms: null,
+       before_id: null,
+     });
+ 
+     await renderTab('realtime');
+     expect(lastParams((params) => Boolean(params.include?.summary))?.include?.events_page).toEqual({
+-      limit: 500,
++      limit: 100,
+       before_ms: null,
+       before_id: null,
+     });
+diff --git a/apps/web/src/features/monitoring/hooks/useMonitoringData.ts b/apps/web/src/features/monitoring/hooks/useMonitoringData.ts
+index 4bfc5f4f..1c18d02b 100644
+--- a/apps/web/src/features/monitoring/hooks/useMonitoringData.ts
++++ b/apps/web/src/features/monitoring/hooks/useMonitoringData.ts
+@@ -102,7 +102,7 @@ export {
+   buildRealtimeMonitorRows,
+ } from '../model/rowBuilders';
+ 
+-const MONITORING_EVENTS_PAGE_LIMIT = 500;
++const MONITORING_EVENTS_PAGE_LIMIT = 100;
+ export const MONITORING_EVENTS_RETENTION_LIMIT = 2_000;
+ const MONITORING_PRESENTATION_CACHE_LIMIT = 4;
+ const EMPTY_MONITORING_ANALYTICS_EVENT_ROWS: MonitoringAnalyticsEventRow[] = [];
+diff --git a/apps/web/src/features/monitoring/hooks/useUsageData.priceBook.test.tsx b/apps/web/src/features/monitoring/hooks/useUsageData.priceBook.test.tsx
+new file mode 100644
+index 00000000..3825a9c3
+--- /dev/null
++++ b/apps/web/src/features/monitoring/hooks/useUsageData.priceBook.test.tsx
+@@ -0,0 +1,59 @@
++import { act, create, type ReactTestRenderer } from 'react-test-renderer';
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { useUsageData } from './useUsageData';
++
++(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
++
++const mocks = vi.hoisted(() => ({
++  prices: vi.fn(async () => ({ prices: {} })),
++  aliases: vi.fn(async () => ({ items: [] })),
++}));
++
++vi.mock('@/stores', () => ({
++  useAuthStore: (selector: (state: { managementKey: string }) => unknown) =>
++    selector({ managementKey: 'fixture-key' }),
++}));
++vi.mock('@/hooks/usePanelFeatureAvailability', () => ({
++  usePanelFeatureAvailability: () => ({
++    managerServiceAvailable: true,
++    modelPricesAvailable: true,
++    requestMonitoringAvailable: true,
++    managerServiceBase: 'http://fixture.local',
++  }),
++}));
++vi.mock('@/services/api/usageService', () => ({
++  usageServiceApi: { getModelPrices: mocks.prices, getApiKeyAliases: mocks.aliases },
++}));
++vi.mock('@/utils/usage', () => ({
++  loadModelPrices: () => ({}),
++  clearModelPrices: vi.fn(),
++  saveModelPrices: vi.fn(),
++}));
++
++let renderer: ReactTestRenderer | undefined;
++function Probe({ load }: { load?: boolean }) {
++  useUsageData({ loadUsageEvents: false, loadModelPriceBook: load });
++  return null;
++}
++beforeEach(() => vi.clearAllMocks());
++afterEach(async () => {
++  if (renderer) await act(async () => renderer?.unmount());
++  renderer = undefined;
++});
++
++describe('optional model price book', () => {
++  it('keeps analytics metadata loading without downloading the price book', async () => {
++    await act(async () => { renderer = create(<Probe load={false} />); });
++    expect(mocks.prices).not.toHaveBeenCalled();
++    expect(mocks.aliases).toHaveBeenCalledOnce();
++  });
++  it('preserves loading for the price editor and realtime callers', async () => {
++    await act(async () => { renderer = create(<Probe />); });
++    expect(mocks.prices).toHaveBeenCalledOnce();
++  });
++  it('loads the book when entering realtime after an analytics-only view', async () => {
++    await act(async () => { renderer = create(<Probe load={false} />); });
++    await act(async () => { renderer?.update(<Probe load />); });
++    expect(mocks.prices).toHaveBeenCalledOnce();
++  });
++});
+diff --git a/apps/web/src/features/monitoring/hooks/useUsageData.ts b/apps/web/src/features/monitoring/hooks/useUsageData.ts
+index 01b988aa..2b49414c 100644
+--- a/apps/web/src/features/monitoring/hooks/useUsageData.ts
++++ b/apps/web/src/features/monitoring/hooks/useUsageData.ts
+@@ -56,10 +56,12 @@ export interface UsageImportOptions {
+ 
+ export interface UseUsageDataOptions {
+   loadUsageEvents?: boolean;
++  loadModelPriceBook?: boolean;
+ }
+ 
+ export function useUsageData({
+   loadUsageEvents = true,
++  loadModelPriceBook = true,
+ }: UseUsageDataOptions = {}): UseUsageDataReturn {
+   const managementKey = useAuthStore((state) => state.managementKey);
+   const featureAvailability = usePanelFeatureAvailability();
+@@ -163,6 +165,7 @@ export function useUsageData({
+   );
+ 
+   const loadModelPricesFromStorage = useCallback(async () => {
++    if (!loadModelPriceBook) return;
+     const fallbackPrices = loadModelPrices();
+     try {
+       const response = await getModelPricesFromApi();
+@@ -182,7 +185,7 @@ export function useUsageData({
+     } catch {
+       setModelPricesState(fallbackPrices);
+     }
+-  }, [getModelPricesFromApi, saveModelPricesToApi]);
++  }, [getModelPricesFromApi, loadModelPriceBook, saveModelPricesToApi]);
+ 
+   const loadApiKeyAliases = useCallback(async () => {
+     const requestId = aliasRequestIdRef.current + 1;
+diff --git a/apps/web/src/features/monitoring/model/monitoringAutoRefresh.ts b/apps/web/src/features/monitoring/model/monitoringAutoRefresh.ts
+new file mode 100644
+index 00000000..2019404b
+--- /dev/null
++++ b/apps/web/src/features/monitoring/model/monitoringAutoRefresh.ts
+@@ -0,0 +1,31 @@
++export type MonitoringAutoRefreshState = {
++  isCurrentLayer: boolean;
++  documentVisible: boolean;
++  connectionStatus: string;
++  autoRefreshMs: string;
++  monitoringLoading: boolean;
++  monitoringScopeTransitioning: boolean;
++};
++
++export const resolveMonitoringAutoRefreshDelay = ({
++  isCurrentLayer,
++  documentVisible,
++  connectionStatus,
++  autoRefreshMs,
++  monitoringLoading,
++  monitoringScopeTransitioning,
++}: MonitoringAutoRefreshState) => {
++  const delay = Number(autoRefreshMs);
++  if (
++    !isCurrentLayer ||
++    !documentVisible ||
++    connectionStatus !== 'connected' ||
++    !Number.isFinite(delay) ||
++    delay <= 0 ||
++    monitoringLoading ||
++    monitoringScopeTransitioning
++  ) {
++    return null;
++  }
++  return delay;
++};
+diff --git a/apps/web/src/features/usage-analytics/useUsageAnalytics.ts b/apps/web/src/features/usage-analytics/useUsageAnalytics.ts
+index 72b289ce..624e2db5 100644
+--- a/apps/web/src/features/usage-analytics/useUsageAnalytics.ts
++++ b/apps/web/src/features/usage-analytics/useUsageAnalytics.ts
+@@ -93,7 +93,10 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
+ 
+ export function useUsageAnalytics() {
+   const config = useConfigStore((state) => state.config);
+-  const { apiKeyAliases, loadApiKeyAliases } = useUsageData({ loadUsageEvents: false });
++  const { apiKeyAliases, loadApiKeyAliases } = useUsageData({
++    loadUsageEvents: false,
++    loadModelPriceBook: false,
++  });
+   const [monitoringMeta, setMonitoringMeta] = useState<UsageAnalyticsMonitoringMeta>(
+     EMPTY_USAGE_ANALYTICS_MONITORING_META
+   );

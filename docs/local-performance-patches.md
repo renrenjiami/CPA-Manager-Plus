@@ -2,10 +2,10 @@
 
 当前分支 codex/cpamp-v1.13.1-minimal；基准 v1.13.1。
 
-1. patches/01-web-delivery.patch：拆包、路由/语言懒加载及配套测试。
-2. patches/02-monitoring-price-and-refresh.patch：价格表按需加载、正费用显示fallback、慢刷新保护、100条事件分页。
-3. patches/03-background-write-coordination.patch：后台补算共享写入门控。
-4. patches/04-startup-regression-tests.patch：10万条数据启动时不重建v1索引且保留已有索引的测试。
+1. local-performance-patches/01-web-delivery.patch：拆包、路由/语言懒加载及配套测试。
+2. local-performance-patches/02-monitoring-price-and-refresh.patch：价格表按需加载、正费用显示fallback、慢刷新保护、100条事件分页。
+3. local-performance-patches/03-background-write-coordination.patch：后台补算共享写入门控。
+4. local-performance-patches/04-startup-regression-tests.patch：10万条数据启动时不重建v1索引且保留已有索引的测试。
 
 migrate.go 和 aggregate_query_plan_test.go 已恢复上游。不要重新引入 ensureUsageEventMonitoringIndexes，也不要在升级时删除数据库现有v1/v2索引。
 上线没有删除任何索引。门控与v1索引的生产规模冷/热A/B仍未完成，不把“暂留”说成“证明必需”。
