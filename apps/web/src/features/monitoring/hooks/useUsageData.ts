@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import i18n from '@/i18n';
+import { useNotificationStore } from '@/stores/useNotificationStore';
 import { usePanelFeatureAvailability } from '@/hooks/usePanelFeatureAvailability';
 import {
   usageServiceApi,
@@ -65,6 +67,7 @@ export function useUsageData({
   loadModelPriceBook = true,
 }: UseUsageDataOptions = {}): UseUsageDataReturn {
   const managementKey = useAuthStore((state) => state.managementKey);
+  const apiBase = useAuthStore((state) => state.apiBase);
   const featureAvailability = usePanelFeatureAvailability();
   const [usage, setUsage] = useState<UsagePayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +90,12 @@ export function useUsageData({
   const usageEventsServiceBase = featureAvailability.requestMonitoringAvailable
     ? featureAvailability.managerServiceBase
     : '';
+
+  useLayoutEffect(() => {
+    aliasRequestIdRef.current += 1;
+    setApiKeyAliases([]);
+    return () => { aliasRequestIdRef.current += 1; };
+  }, [apiBase, managementKey, modelPriceServiceBase]);
 
   const getModelPricesFromApi = useCallback(async (): Promise<ModelPricesResponse> => {
     if (!modelPriceServiceBase) {
@@ -203,7 +212,7 @@ export function useUsageData({
       setApiKeyAliases(Array.isArray(response.items) ? response.items : []);
     } catch {
       if (aliasRequestIdRef.current !== requestId) return;
-      setApiKeyAliases([]);
+      useNotificationStore.getState().showNotification(i18n.t('notification.refresh_failed'), 'error');
     }
   }, [getApiKeyAliasesFromApi]);
 
@@ -248,7 +257,7 @@ export function useUsageData({
     void loadModelPricesFromStorage();
     void loadApiKeyAliases();
     void loadUsage();
-  }, [loadApiKeyAliases, loadModelPricesFromStorage, loadUsage]);
+  }, [apiBase, loadApiKeyAliases, loadModelPricesFromStorage, loadUsage]);
 
   const setModelPrices = useCallback(
     async (prices: Record<string, ModelPrice>) => {
