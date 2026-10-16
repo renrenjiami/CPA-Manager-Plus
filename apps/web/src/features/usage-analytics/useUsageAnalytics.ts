@@ -100,6 +100,7 @@ export function useUsageAnalytics() {
   const [monitoringMeta, setMonitoringMeta] = useState<UsageAnalyticsMonitoringMeta>(
     EMPTY_USAGE_ANALYTICS_MONITORING_META
   );
+  const [monitoringMetaError, setMonitoringMetaError] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
   const [initialUiState] = useState<UsageAnalyticsUiState>(() =>
     buildUsageAnalyticsUiStateFromSearchParams(searchParams, readUsageAnalyticsUiState())
@@ -132,10 +133,11 @@ export function useUsageAnalytics() {
   );
   const loadMonitoringMeta = useCallback(async () => {
     const payload = await loadMonitoringMetaPayload(config);
-    setMonitoringMeta({
-      authFiles: payload.authFiles,
-      channels: payload.channels,
-    });
+    setMonitoringMeta((current) => ({
+      authFiles: payload.authFilesLoaded ? payload.authFiles : current.authFiles,
+      channels: payload.channelsLoaded ? payload.channels : current.channels,
+    }));
+    setMonitoringMetaError(payload.error);
   }, [config]);
   useEffect(() => {
     let cancelled = false;
@@ -146,10 +148,12 @@ export function useUsageAnalytics() {
           authFiles: payload.authFiles,
           channels: payload.channels,
         });
+        setMonitoringMetaError(payload.error);
       })
-      .catch(() => {
+      .catch((error) => {
         if (!cancelled) {
           setMonitoringMeta(EMPTY_USAGE_ANALYTICS_MONITORING_META);
+          setMonitoringMetaError(error instanceof Error ? error.message : String(error));
         }
       });
     return () => {
@@ -790,7 +794,7 @@ export function useUsageAnalytics() {
     bounds,
     resolvedGranularity,
     loading: analytics.loading,
-    error: analytics.error,
+    error: analytics.error || monitoringMetaError,
     enabled: analytics.enabled,
     apiKeyDisplayMap,
     unavailableReason: analytics.unavailableReason,
@@ -814,6 +818,7 @@ export function useUsageAnalytics() {
     selectedHeatmapDateKey: activeHeatmapDateKey,
     selectHeatmapDate,
     heatmapDateLoading: heatmapDateRefreshing,
+    heatmapDateLoaded: Boolean(heatmapDateData),
     heatmapDateError: selectedHeatmapDate ? heatmapDateAnalytics.error : '',
     selectedHeatmapCell,
     selectHeatmapCell,
@@ -832,6 +837,7 @@ export function useUsageAnalytics() {
     selectedApiKeyTrendSeries,
     credentialTrendSeries,
     credentialTrendLoading,
+    credentialTrendLoaded: Boolean(selectedCredentialTimelineData),
     credentialTrendError,
     keyAnomalies,
     credentialAnomalies,
