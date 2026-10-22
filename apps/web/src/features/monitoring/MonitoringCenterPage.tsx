@@ -124,6 +124,7 @@ import {
   type StatusFilter,
 } from '@/features/monitoring/model/monitoringCenterPageModel';
 import { resolveMonitoringDimensionCounts } from '@/features/monitoring/model/monitoringAnalyticsModel';
+import { resolveMonitoringAutoRefreshDelay } from '@/features/monitoring/model/monitoringAutoRefresh';
 import { useUsageData } from '@/features/monitoring/hooks/useUsageData';
 import { useHeaderSnapshotsLoader } from '@/features/monitoring/hooks/useHeaderSnapshotsLoader';
 import {
@@ -462,7 +463,12 @@ export function MonitoringCenterPage() {
     exportUsage,
     importUsage,
     cancelUsageImport,
-  } = useUsageData({ loadUsageEvents: false });
+  } = useUsageData({
+    loadUsageEvents: false,
+    // Account/API-key costs already arrive with server analytics. Only the
+    // realtime event view needs the full book for client-side event pricing.
+    loadModelPriceBook: activeDataTab === 'realtime',
+  });
 
   const monitoringScopeFilters = useMemo(
     () => ({
@@ -741,12 +747,14 @@ export function MonitoringCenterPage() {
     () => {
       void refreshAll().catch(() => {});
     },
-    isCurrentLayer &&
-      documentVisible &&
-      connectionStatus === 'connected' &&
-      Number(autoRefreshMs) > 0
-      ? Number(autoRefreshMs)
-      : null
+    resolveMonitoringAutoRefreshDelay({
+      isCurrentLayer,
+      documentVisible,
+      connectionStatus,
+      autoRefreshMs,
+      monitoringLoading,
+      monitoringScopeTransitioning,
+    })
   );
 
   useEffect(() => {
@@ -774,7 +782,9 @@ export function MonitoringCenterPage() {
   const combinedError = monitoringUnavailable
     ? monitoringError
     : [usageError, monitoringError].filter(Boolean).join('；');
-  const hasPrices = Object.keys(modelPrices).length > 0;
+  const hasPrices =
+    Object.keys(modelPrices).length > 0 ||
+    (Number.isFinite(monitoringSummary.totalCost) && monitoringSummary.totalCost > 0);
 
   useEffect(() => {
     accountQuotaStatesByRowIdRef.current = accountQuotaStatesByRowId;

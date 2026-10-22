@@ -102,7 +102,7 @@ export {
   buildRealtimeMonitorRows,
 } from '../model/rowBuilders';
 
-const MONITORING_EVENTS_PAGE_LIMIT = 500;
+const MONITORING_EVENTS_PAGE_LIMIT = 100;
 export const MONITORING_EVENTS_RETENTION_LIMIT = 2_000;
 const MONITORING_PRESENTATION_CACHE_LIMIT = 4;
 const EMPTY_MONITORING_ANALYTICS_EVENT_ROWS: MonitoringAnalyticsEventRow[] = [];

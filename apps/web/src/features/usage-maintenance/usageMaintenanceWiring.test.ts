@@ -29,14 +29,15 @@ const collectKeys = (value: unknown, result = new Set<string>()): Set<string> =>
   return result;
 };
 
-const usageMaintenancePageImport = `import { UsageMaintenancePage } from '${[
+const usageMaintenancePageImport = `() => import('${[
   '@',
   'pages',
   'UsageMaintenancePage',
-].join('/')}';`;
+].join('/')}'),`;
 
 describe('usage maintenance app wiring', () => {
   it('registers the route behind Manager Embedded and Manager Service availability checks', () => {
+    expect(routesSource).toContain('const UsageMaintenancePage = lazyNamed(');
     expect(routesSource).toContain(usageMaintenancePageImport);
     const gateStart = routesSource.indexOf('function UsageMaintenanceGate');
     const gateEnd = routesSource.indexOf('function LogsGate');

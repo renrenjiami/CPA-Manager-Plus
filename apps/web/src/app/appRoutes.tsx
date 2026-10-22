@@ -1,9 +1,14 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, type RouteObject } from 'react-router-dom';
-import { MainLayout } from '@/components/layout/MainLayout';
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { DemoPage } from '@/pages/DemoPage';
 import { LoginPage } from '@/pages/LoginPage';
 import { ProtectedRoute } from '@/router/ProtectedRoute';
 import { RootShell } from './RootShell';
+
+const MainLayout = lazy(async () => ({
+  default: (await import('@/components/layout/MainLayout')).MainLayout,
+}));
 
 const appRoutes: RouteObject[] = [
   {
@@ -20,7 +25,9 @@ const appRoutes: RouteObject[] = [
             path: '/*',
             element: (
               <ProtectedRoute>
-                <MainLayout />
+                <Suspense fallback={<LoadingSpinner size={28} />}>
+                  <MainLayout />
+                </Suspense>
               </ProtectedRoute>
             ),
           },
